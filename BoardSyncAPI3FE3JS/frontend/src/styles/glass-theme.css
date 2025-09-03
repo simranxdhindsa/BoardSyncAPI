@@ -1,0 +1,485 @@
+/* iOS 26 Light Glass Theme */
+
+/* Remove custom cursor - use natural cursor */
+/* Custom Figma-style cursor - DISABLED for natural behavior */
+/*
+* {
+  cursor: none !important;
+}
+*/
+
+/* Fluid typography based on mouse movement */
+.fluid-text {
+  transition: font-size 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), 
+              font-weight 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              letter-spacing 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.fluid-text.mouse-active {
+  font-size: 1.1em;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* Global light theme background */
+body {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+  color: #1e293b;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  font-weight: 400;
+  overflow-x: hidden;
+}
+
+/* Base glass panel class */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  box-shadow: 
+    0 8px 32px rgba(31, 38, 135, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.glass-panel:hover {
+  background: rgba(255, 255, 255, 0.35);
+  border-color: rgba(255, 255, 255, 0.45);
+  transform: translateY(-2px);
+  box-shadow: 
+    0 12px 40px rgba(31, 38, 135, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+/* Enhanced dashboard container */
+.min-h-screen {
+  background: transparent;
+  position: relative;
+  z-index: 1;
+}
+
+/* ApyHub header with glass theme */
+nav {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* Glass buttons */
+button {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #374151;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Interactive elements that respond to cursor */
+.interactive-element {
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.interactive-element:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+/* Mouse-responsive background elements */
+.mouse-responsive {
+  transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              opacity 0.3s ease;
+}
+
+/* Disable selection and pointer events for non-interactive elements */
+.pointer-events-none {
+  pointer-events: none;
+}
+
+.select-none {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Active/Selected states */
+.border-blue-500,
+.bg-blue-50,
+button.active,
+.bg-blue-600 {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #1e40af;
+  box-shadow: 
+    0 4px 20px rgba(59, 130, 246, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 0 0 1px rgba(59, 130, 246, 0.1);
+}
+
+.bg-blue-600:hover {
+  background: rgba(59, 130, 246, 0.3);
+  color: #1e40af;
+  transform: translateY(-1px);
+}
+
+/* Glass cards and panels */
+.bg-white,
+.border-gray-200 {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 
+    0 4px 16px rgba(31, 38, 135, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* Status indicators with glass effect */
+.bg-green-50 {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.bg-yellow-50 {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.bg-blue-50 {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.bg-purple-50 {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.bg-indigo-50 {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+/* Alert and status backgrounds */
+.bg-red-50 {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.bg-orange-50 {
+  background: rgba(251, 146, 60, 0.15);
+  border-color: rgba(251, 146, 60, 0.3);
+}
+
+/* Ticket cards with enhanced glass */
+.hover\\:shadow-md:hover {
+  box-shadow: 
+    0 8px 25px rgba(31, 38, 135, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+}
+
+/* Table styling with glass effect */
+table {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+thead tr {
+  background: rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+tbody tr:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Input fields with glass styling */
+input, select, textarea {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #374151;
+}
+
+input:focus, select:focus, textarea:focus {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Modal and overlay styling */
+.modal-overlay {
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(8px);
+}
+
+.modal-content {
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  box-shadow: 
+    0 20px 60px rgba(31, 38, 135, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Loading states */
+.animate-spin {
+  color: #3b82f6;
+}
+
+.animate-fade-in {
+  animation: fadeInGlass 0.5s ease-in-out;
+}
+
+@keyframes fadeInGlass {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(24px);
+    transform: translateY(0px);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUpGlass 0.3s ease-out;
+}
+
+@keyframes slideUpGlass {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0px) scale(1);
+  }
+}
+
+/* Enhanced scrollbar for glass theme */
+::-webkit-scrollbar {
+  width: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.3);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.5);
+}
+
+/* Tag display with glass effect */
+.tag-glass {
+  background: rgba(59, 130, 246, 0.15);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 12px;
+  padding: 4px 8px;
+  color: #1e40af;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Status badges with enhanced glass */
+.status-badge {
+  backdrop-filter: blur(12px);
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 4px 8px;
+  border: 1px solid;
+}
+
+.status-badge.matched {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #065f46;
+}
+
+.status-badge.mismatched {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #92400e;
+}
+
+.status-badge.missing {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #1e40af;
+}
+
+.status-badge.blocked {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #991b1b;
+}
+
+/* Success/Error states */
+.bg-green-100 {
+  background: rgba(16, 185, 129, 0.15);
+  backdrop-filter: blur(8px);
+}
+
+.bg-red-100 {
+  background: rgba(239, 68, 68, 0.15);
+  backdrop-filter: blur(8px);
+}
+
+.bg-yellow-100 {
+  background: rgba(245, 158, 11, 0.15);
+  backdrop-filter: blur(8px);
+}
+
+.bg-orange-100 {
+  background: rgba(251, 146, 60, 0.15);
+  backdrop-filter: blur(8px);
+}
+
+/* Text colors for light theme */
+.text-gray-900 {
+  color: #1e293b;
+}
+
+.text-gray-700 {
+  color: #374151;
+}
+
+.text-gray-600 {
+  color: #4b5563;
+}
+
+.text-gray-500 {
+  color: #6b7280;
+}
+
+.text-gray-400 {
+  color: #9ca3af;
+}
+
+/* Enhanced button states */
+.disabled\\:opacity-50:disabled {
+  opacity: 0.5;
+  backdrop-filter: blur(8px);
+}
+
+.disabled\\:cursor-not-allowed:disabled {
+  cursor: not-allowed;
+}
+
+/* Responsive glass panels */
+@media (max-width: 768px) {
+  .glass-panel {
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border-radius: 16px;
+    margin: 8px;
+  }
+  
+  nav {
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+  }
+}
+
+/* Funny credit footer styling */
+.credit-footer {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+  z-index: 1000;
+  box-shadow: 
+    0 4px 12px rgba(31, 38, 135, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+}
+
+.credit-footer:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 
+    0 8px 20px rgba(31, 38, 135, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* ApyHub logo specific styling */
+.apyhub-logo {
+  filter: brightness(0.8) contrast(1.2);
+}
+
+/* Enhanced focus states */
+*:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Loading overlay with glass effect */
+.loading-overlay {
+  background: rgba(248, 250, 252, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Grid layouts with glass spacing */
+.stats-grid {
+  gap: 16px;
+}
+
+.stats-grid > * {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.stats-grid > *:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
