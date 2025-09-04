@@ -1,4 +1,4 @@
-const API_BASE = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8080';
+const API_BASE = process.env.NODE_ENV === 'production' ? '' : 'https://boardsyncapi.onrender.com';
 
 export const analyzeTickets = async () => {
   const response = await fetch(`${API_BASE}/analyze`);
