@@ -85,7 +85,7 @@ const Dashboard = ({ selectedColumn, onColumnSelect, onAnalyze, loading }) => {
               </div>
               <div className="flex items-center">
                 <img 
-                  src="/assets/ardoise-logo.png" 
+                  src="https://mission-control.ardoirse.com/branding/desktop-logo.png" 
                   alt="Ardoise Project" 
                   className="h-10 w-10 rounded-lg shadow-sm"
                   onError={(e) => {

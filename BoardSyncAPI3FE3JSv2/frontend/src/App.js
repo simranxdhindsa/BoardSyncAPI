@@ -122,7 +122,7 @@ function App() {
       
       {/* Funny Credit Footer */}
       <div className="credit-footer">
-        Made with Frustration by Simran • Powered by Three.js & Glass Magic
+        Made with Frustration By Simran • Powered by Three.js
       </div>
     </div>
   );
