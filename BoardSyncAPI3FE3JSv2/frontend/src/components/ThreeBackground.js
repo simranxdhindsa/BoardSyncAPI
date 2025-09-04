@@ -1,14 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { 
-  createBurjKhalifaGeometry, 
-  createEiffelTowerGeometry, 
-  createModernSkyscraperGeometry,
-  createBridgeGeometry,
-  createTajMahalGeometry,
-  createiPhoneGeometry,
-  createMonumentMaterial 
-} from '../utils/monumentGeometries';
 
 const ThreeBackground = ({ currentView, analysisData, selectedColumn, isLoading }) => {
   const mountRef = useRef(null);
@@ -17,228 +8,505 @@ const ThreeBackground = ({ currentView, analysisData, selectedColumn, isLoading 
   const cameraRef = useRef(null);
   const animationIdRef = useRef(null);
   const mouseRef = useRef({ x: 0, y: 0, normalizedX: 0, normalizedY: 0 });
+  const movingElementsRef = useRef([]);
+  const currentThemeRef = useRef(0);
+  const themeTimerRef = useRef(0);
+  const spawnTimerRef = useRef(0);
   
-  // Animation state
-  const animationStateRef = useRef({
-    currentElementIndex: 0,
-    currentMonumentIndex: 0,
-    phase: 'writingText',
-    progress: 0,
-    startTime: 0,
-    currentSide: 'left',
-    textWritingSpeed: 3000,
-    drawingSpeed: 2500,
-    showDuration: 6000,
-    erasingSpeed: 1500,
-    dotMoveSpeed: 1000
-  });
-  
-  const currentElementRef = useRef(null);
-  const currentMonumentRef = useRef(null);
-  const textMeshRef = useRef(null);
-  const dotRef = useRef(null);
+  // All tech themes that cycle
+  const techThemes = [
+    'binary_streams',
+    'data_packets',
+    'signal_waves', 
+    'progress_bars',
+    'code_snippets',
+    'git_commits',
+    'api_endpoints',
+    'database_symbols',
+    'network_nodes',
+    'server_racks',
+    'cloud_symbols',
+    'circuit_traces'
+  ];
 
-  // Simple positioning for extreme left and right
-  const getPositionForSide = (side) => {
-    return side === 'left' ? { x: -30, y: 0, z: -15 } : { x: 30, y: 0, z: -15 };
+  // Simple, clean element creators
+  const createBinaryStream = () => {
+    const geometry = new THREE.PlaneGeometry(1, 1.5);
+    const material = new THREE.MeshBasicMaterial({
+      color: Math.random() > 0.5 ? 0x00ff41 : 0x008f11,
+      transparent: true,
+      opacity: 0.8
+    });
+    return new THREE.Mesh(geometry, material);
   };
 
-  const getDotPosition = (side) => {
-    if (side === 'left') return { x: -30, y: 0, z: -15 };
-    if (side === 'right') return { x: 30, y: 0, z: -15 };
-    return { x: 0, y: 0, z: -15 };
+  const createDataPacket = () => {
+    const geometry = new THREE.BoxGeometry(2, 1, 1);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x3b82f6,
+      transparent: true,
+      opacity: 0.7,
+      wireframe: true
+    });
+    return new THREE.Mesh(geometry, material);
   };
 
-  // Advanced 3D Elements
-  const createDNAHelix = () => {
-    const group = new THREE.Group();
-    const helixHeight = 8;
-    const radius = 1.5;
-    const turns = 3;
-    const points1 = [];
-    const points2 = [];
-    
-    for (let i = 0; i <= 100; i++) {
-      const t = i / 100;
-      const y = helixHeight * t - helixHeight / 2;
-      const angle = t * turns * Math.PI * 2;
-      
-      points1.push(new THREE.Vector3(
-        Math.cos(angle) * radius,
-        y,
-        Math.sin(angle) * radius
-      ));
-      
-      points2.push(new THREE.Vector3(
-        Math.cos(angle + Math.PI) * radius,
-        y,
-        Math.sin(angle + Math.PI) * radius
-      ));
+  const createSignalWave = () => {
+    const points = [];
+    for (let i = 0; i <= 30; i++) {
+      const x = (i / 30) * 6 - 3;
+      const y = Math.sin(x * 2) * 1.5;
+      points.push(new THREE.Vector3(x, y, 0));
     }
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({ 
+      color: 0x06b6d4,
+      linewidth: 2
+    });
+    return new THREE.Line(geometry, material);
+  };
+
+  const createProgressBar = () => {
+    const group = new THREE.Group();
+    const progress = Math.random();
     
-    const geometry1 = new THREE.BufferGeometry().setFromPoints(points1);
-    const geometry2 = new THREE.BufferGeometry().setFromPoints(points2);
+    // Background
+    const bgGeometry = new THREE.BoxGeometry(4, 0.4, 0.2);
+    const bgMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0x333333,
+      transparent: true,
+      opacity: 0.5
+    });
+    const bg = new THREE.Mesh(bgGeometry, bgMaterial);
+    group.add(bg);
     
-    const material1 = new THREE.LineBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.8 });
-    const material2 = new THREE.LineBasicMaterial({ color: 0xff4488, transparent: true, opacity: 0.8 });
-    
-    const helix1 = new THREE.Line(geometry1, material1);
-    const helix2 = new THREE.Line(geometry2, material2);
-    
-    group.add(helix1);
-    group.add(helix2);
+    // Fill
+    const fillGeometry = new THREE.BoxGeometry(4 * progress, 0.3, 0.15);
+    const fillMaterial = new THREE.MeshBasicMaterial({ 
+      color: progress > 0.7 ? 0x10b981 : progress > 0.4 ? 0xf59e0b : 0xef4444
+    });
+    const fill = new THREE.Mesh(fillGeometry, fillMaterial);
+    fill.position.x = -(4 - 4 * progress) / 2;
+    group.add(fill);
     
     return group;
   };
 
-  const createWaveInterference = () => {
+  const createCodeSnippet = () => {
     const group = new THREE.Group();
-    const size = 10;
-    const resolution = 30;
-    
-    for (let wave = 0; wave < 3; wave++) {
-      const geometry = new THREE.PlaneGeometry(size, size, resolution, resolution);
-      const positions = geometry.attributes.position.array;
-      
-      for (let i = 0; i < positions.length; i += 3) {
-        const x = positions[i];
-        const z = positions[i + 2];
-        const distance = Math.sqrt(x * x + z * z);
-        positions[i + 1] = Math.sin(distance * 0.5 + wave * Math.PI / 1.5) * 0.5;
-      }
-      
-      geometry.attributes.position.needsUpdate = true;
+    for (let i = 0; i < 4; i++) {
+      const width = 1 + Math.random() * 2;
+      const geometry = new THREE.BoxGeometry(width, 0.3, 0.1);
       const material = new THREE.MeshBasicMaterial({ 
-        color: new THREE.Color().setHSL(wave * 0.3, 0.7, 0.5),
-        wireframe: true,
-        transparent: true,
-        opacity: 0.4
-      });
-      
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.position.y = wave * 2 - 2;
-      group.add(mesh);
-    }
-    
-    return group;
-  };
-
-  const createNeuralNetwork = () => {
-    const group = new THREE.Group();
-    const nodeCount = 15;
-    const nodes = [];
-    
-    // Create nodes
-    for (let i = 0; i < nodeCount; i++) {
-      const nodeGeometry = new THREE.SphereGeometry(0.2, 8, 6);
-      const nodeMaterial = new THREE.MeshBasicMaterial({ 
-        color: new THREE.Color().setHSL(Math.random(), 0.7, 0.6),
+        color: 0xf59e0b,
         transparent: true,
         opacity: 0.8
       });
-      
-      const node = new THREE.Mesh(nodeGeometry, nodeMaterial);
-      node.position.set(
-        (Math.random() - 0.5) * 8,
-        (Math.random() - 0.5) * 6,
-        (Math.random() - 0.5) * 4
-      );
-      
-      group.add(node);
-      nodes.push(node);
+      const line = new THREE.Mesh(geometry, material);
+      line.position.set(0, i * 0.4 - 0.6, 0);
+      group.add(line);
     }
+    return group;
+  };
+
+  const createGitCommit = () => {
+    const group = new THREE.Group();
     
-    // Create connections
-    for (let i = 0; i < nodeCount; i++) {
-      for (let j = i + 1; j < nodeCount; j++) {
-        if (Math.random() < 0.2) {
-          const points = [nodes[i].position, nodes[j].position];
-          const geometry = new THREE.BufferGeometry().setFromPoints(points);
-          const material = new THREE.LineBasicMaterial({ 
-            color: 0x4488ff,
-            transparent: true,
-            opacity: 0.3
-          });
-          
-          const connection = new THREE.Line(geometry, material);
-          group.add(connection);
-        }
-      }
+    // Main line
+    const lineGeometry = new THREE.BoxGeometry(4, 0.1, 0.1);
+    const lineMaterial = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+    const line = new THREE.Mesh(lineGeometry, lineMaterial);
+    group.add(line);
+    
+    // Commit nodes
+    for (let i = 0; i < 5; i++) {
+      const nodeGeometry = new THREE.SphereGeometry(0.2);
+      const nodeMaterial = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+      const node = new THREE.Mesh(nodeGeometry, nodeMaterial);
+      node.position.x = i * 1 - 2;
+      group.add(node);
     }
     
     return group;
   };
 
-  const createSoundWaves = () => {
+  const createAPIEndpoint = () => {
     const group = new THREE.Group();
-    const waveCount = 5;
     
-    for (let w = 0; w < waveCount; w++) {
-      const points = [];
-      const frequency = 2 + w * 0.5;
-      const amplitude = 1 + w * 0.3;
+    const boxGeometry = new THREE.BoxGeometry(3, 0.8, 0.2);
+    const boxMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0x06b6d4,
+      wireframe: true
+    });
+    const box = new THREE.Mesh(boxGeometry, boxMaterial);
+    group.add(box);
+    
+    const dotGeometry = new THREE.SphereGeometry(0.1);
+    const dotMaterial = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+    const dot = new THREE.Mesh(dotGeometry, dotMaterial);
+    dot.position.x = -1.2;
+    group.add(dot);
+    
+    return group;
+  };
+
+  const createDatabase = () => {
+    const geometry = new THREE.CylinderGeometry(1, 1, 2, 12);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x8b5cf6,
+      transparent: true,
+      opacity: 0.7,
+      wireframe: true
+    });
+    return new THREE.Mesh(geometry, material);
+  };
+
+  const createNetworkNode = () => {
+    const group = new THREE.Group();
+    
+    // Center node
+    const centerGeometry = new THREE.SphereGeometry(0.5);
+    const centerMaterial = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+    const center = new THREE.Mesh(centerGeometry, centerMaterial);
+    group.add(center);
+    
+    // Connected nodes
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      const x = Math.cos(angle) * 2;
+      const y = Math.sin(angle) * 2;
       
-      for (let i = 0; i <= 100; i++) {
-        const x = (i - 50) * 0.2;
-        const y = Math.sin(i * 0.1 * frequency) * amplitude;
-        points.push(new THREE.Vector3(x, y, w * 0.5));
-      }
+      const nodeGeometry = new THREE.SphereGeometry(0.2);
+      const nodeMaterial = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
+      const node = new THREE.Mesh(nodeGeometry, nodeMaterial);
+      node.position.set(x, y, 0);
+      group.add(node);
       
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const material = new THREE.LineBasicMaterial({ 
-        color: new THREE.Color().setHSL(w * 0.2, 0.8, 0.6),
+      // Connection line
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(x, y, 0)
+      ]);
+      const lineMaterial = new THREE.LineBasicMaterial({ 
+        color: 0xf59e0b,
+        transparent: true,
+        opacity: 0.6
+      });
+      const line = new THREE.Line(lineGeometry, lineMaterial);
+      group.add(line);
+    }
+    
+    return group;
+  };
+
+  const createServerRack = () => {
+    const group = new THREE.Group();
+    
+    // Main frame
+    const frameGeometry = new THREE.BoxGeometry(2, 4, 1);
+    const frameMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0x6366f1,
+      wireframe: true
+    });
+    const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+    group.add(frame);
+    
+    // Servers
+    for (let i = 0; i < 6; i++) {
+      const serverGeometry = new THREE.BoxGeometry(1.8, 0.5, 0.8);
+      const serverMaterial = new THREE.MeshBasicMaterial({ 
+        color: i % 2 === 0 ? 0x10b981 : 0xf59e0b 
+      });
+      const server = new THREE.Mesh(serverGeometry, serverMaterial);
+      server.position.y = i * 0.6 - 1.5;
+      group.add(server);
+    }
+    
+    return group;
+  };
+
+  const createCloudSymbol = () => {
+    const group = new THREE.Group();
+    
+    // Cloud spheres
+    const positions = [
+      [0, 0, 0], [-1, 0, 0], [1, 0, 0], [-0.5, 0.8, 0], [0.5, 0.8, 0]
+    ];
+    
+    positions.forEach(pos => {
+      const geometry = new THREE.SphereGeometry(0.5);
+      const material = new THREE.MeshBasicMaterial({ 
+        color: 0x06b6d4,
+        wireframe: true,
         transparent: true,
         opacity: 0.7
       });
-      
-      const wave = new THREE.Line(geometry, material);
-      group.add(wave);
-    }
+      const sphere = new THREE.Mesh(geometry, material);
+      sphere.position.set(...pos);
+      group.add(sphere);
+    });
     
     return group;
   };
 
-  useEffect(() => {
-    initThreeJS();
-    createDot();
-    startAnimation();
+  const createCircuitTrace = () => {
+    const group = new THREE.Group();
     
+    const points = [
+      new THREE.Vector3(-2, 0, 0),
+      new THREE.Vector3(-1, 0, 0),
+      new THREE.Vector3(-1, 1, 0),
+      new THREE.Vector3(1, 1, 0),
+      new THREE.Vector3(1, -1, 0),
+      new THREE.Vector3(2, -1, 0)
+    ];
+    
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({ 
+      color: 0x10b981,
+      linewidth: 2
+    });
+    const trace = new THREE.Line(geometry, material);
+    group.add(trace);
+    
+    // Connection points
+    points.forEach(point => {
+      const dotGeometry = new THREE.SphereGeometry(0.1);
+      const dotMaterial = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+      const dot = new THREE.Mesh(dotGeometry, dotMaterial);
+      dot.position.copy(point);
+      group.add(dot);
+    });
+    
+    return group;
+  };
+
+  // Get current theme creator
+  const getCurrentThemeCreator = () => {
+    const currentTheme = techThemes[currentThemeRef.current];
+    
+    switch(currentTheme) {
+      case 'binary_streams': return createBinaryStream;
+      case 'data_packets': return createDataPacket;
+      case 'signal_waves': return createSignalWave;
+      case 'progress_bars': return createProgressBar;
+      case 'code_snippets': return createCodeSnippet;
+      case 'git_commits': return createGitCommit;
+      case 'api_endpoints': return createAPIEndpoint;
+      case 'database_symbols': return createDatabase;
+      case 'network_nodes': return createNetworkNode;
+      case 'server_racks': return createServerRack;
+      case 'cloud_symbols': return createCloudSymbol;
+      case 'circuit_traces': return createCircuitTrace;
+      default: return createDataPacket;
+    }
+  };
+
+  // Clear all elements
+  const clearAllElements = () => {
+    movingElementsRef.current.forEach(element => {
+      sceneRef.current.remove(element.object);
+      if (element.object.traverse) {
+        element.object.traverse(child => {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(mat => mat.dispose());
+            } else {
+              child.material.dispose();
+            }
+          }
+        });
+      }
+    });
+    movingElementsRef.current = [];
+  };
+
+  // Spawn individual element with proper spacing
+  const spawnElement = () => {
+    const creator = getCurrentThemeCreator();
+    const element = creator();
+    
+    // Start position - far left, random Y with good spacing
+    element.position.set(
+      -100, // Start far left
+      (Math.random() - 0.5) * 50, // Random Y position with wide spread
+      (Math.random() - 0.5) * 20  // Random Z for depth
+    );
+    
+    // Random but subtle rotation
+    element.rotation.set(
+      (Math.random() - 0.5) * 0.5,
+      (Math.random() - 0.5) * 0.5,
+      (Math.random() - 0.5) * 0.5
+    );
+    
+    // Scale for visibility
+    const scale = 2 + Math.random() * 2;
+    element.scale.setScalar(scale);
+    
+    sceneRef.current.add(element);
+    
+    // Store with movement properties
+    movingElementsRef.current.push({
+      object: element,
+      speed: 0.3 + Math.random() * 0.4,
+      rotationSpeed: (Math.random() - 0.5) * 0.01,
+      verticalFloat: Math.random() * 0.15,
+      floatOffset: Math.random() * Math.PI * 2,
+      mouseResponseX: (Math.random() - 0.5) * 2,
+      mouseResponseY: (Math.random() - 0.5) * 2
+    });
+  };
+
+  // Create steady background elements
+  const createStaticElements = () => {
+    clearAllElements();
+    const creator = getCurrentThemeCreator();
+    
+    // Create multiple elements spread across the screen
+    for (let i = 0; i < 12; i++) {
+      const element = creator();
+      
+      // Distribute elements across the entire screen with good spacing
+      element.position.set(
+        (Math.random() - 0.5) * 120, // Spread across X (-60 to +60)
+        (Math.random() - 0.5) * 60,  // Spread across Y (-30 to +30)
+        (Math.random() - 0.5) * 40   // Random Z depth (-20 to +20)
+      );
+      
+      // Random but subtle rotation
+      element.rotation.set(
+        (Math.random() - 0.5) * 0.5,
+        (Math.random() - 0.5) * 0.5,
+        (Math.random() - 0.5) * 0.5
+      );
+      
+      // Scale for visibility
+      const scale = 1.5 + Math.random() * 1.5;
+      element.scale.setScalar(scale);
+      
+      sceneRef.current.add(element);
+      
+      // Store with animation properties (no horizontal movement)
+      movingElementsRef.current.push({
+        object: element,
+        rotationSpeed: (Math.random() - 0.5) * 0.008,
+        verticalFloat: Math.random() * 0.1,
+        floatOffset: Math.random() * Math.PI * 2,
+        mouseResponseX: (Math.random() - 0.5) * 1,
+        mouseResponseY: (Math.random() - 0.5) * 1,
+        originalY: element.position.y
+      });
+    }
+  };
+
+  // Create all elements at once with high scaling
+  const createAllElements = () => {
+    clearAllElements();
+    
+    // Array of all element creators
+    const allCreators = [
+      createBinaryStream,
+      createDataPacket,
+      createSignalWave, 
+      createProgressBar,
+      createCodeSnippet,
+      createGitCommit,
+      createAPIEndpoint,
+      createDatabase,
+      createNetworkNode,
+      createServerRack,
+      createCloudSymbol,
+      createCircuitTrace
+    ];
+    
+    // Create multiple instances of each element type
+    allCreators.forEach((creator, typeIndex) => {
+      for (let i = 0; i < 8; i++) { // 8 instances of each type
+        const element = creator();
+        
+        // Distribute elements across the entire screen with good spacing
+        element.position.set(
+          (Math.random() - 0.5) * 160, // Wide spread across X (-80 to +80)
+          (Math.random() - 0.5) * 80,  // Wide spread across Y (-40 to +40)
+          (Math.random() - 0.5) * 60   // Deep Z spread (-30 to +30)
+        );
+        
+        // Random rotation for variety
+        element.rotation.set(
+          (Math.random() - 0.5) * 1,
+          (Math.random() - 0.5) * 1,
+          (Math.random() - 0.5) * 1
+        );
+        
+        // High scaling for visibility
+        const scale = 3 + Math.random() * 3; // Scale 3-6x for high visibility
+        element.scale.setScalar(scale);
+        
+        sceneRef.current.add(element);
+        
+        // Store with animation properties
+        movingElementsRef.current.push({
+          object: element,
+          rotationSpeed: (Math.random() - 0.5) * 0.005,
+          verticalFloat: Math.random() * 0.08,
+          floatOffset: Math.random() * Math.PI * 2,
+          mouseResponseX: (Math.random() - 0.5) * 0.8,
+          mouseResponseY: (Math.random() - 0.5) * 0.8,
+          originalY: element.position.y,
+          elementType: typeIndex
+        });
+      }
+    });
+    
+    console.log(`Created ${movingElementsRef.current.length} total elements (all types visible)`);
+  };
+
+  useEffect(() => {
+    console.log('ThreeBackground: Starting improved tech system...');
+    initScene();
+    startAnimation();
+
     const handleMouseMove = (event) => {
       mouseRef.current = {
-        x: event.clientX,
-        y: event.clientY,
         normalizedX: (event.clientX / window.innerWidth) * 2 - 1,
         normalizedY: -(event.clientY / window.innerHeight) * 2 + 1
       };
     };
-    
+
+    const handleResize = () => {
+      if (cameraRef.current && rendererRef.current) {
+        cameraRef.current.aspect = window.innerWidth / window.innerHeight;
+        cameraRef.current.updateProjectionMatrix();
+        rendererRef.current.setSize(window.innerWidth, window.innerHeight);
+      }
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
-    
+    window.addEventListener('resize', handleResize);
+
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
-      if (animationIdRef.current) {
-        cancelAnimationFrame(animationIdRef.current);
-      }
+      window.removeEventListener('resize', handleResize);
       cleanup();
     };
   }, []);
 
-  const initThreeJS = () => {
+  const initScene = () => {
     const scene = new THREE.Scene();
+    scene.background = null;
     sceneRef.current = scene;
 
-    const camera = new THREE.PerspectiveCamera(110, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 5, 25);
+    // Camera positioned for good left-to-right view
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+    camera.position.set(0, 0, 60);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ 
-      antialias: true, 
-      alpha: true,
-      premultipliedAlpha: false
-    });
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
     rendererRef.current = renderer;
 
@@ -246,170 +514,72 @@ const ThreeBackground = ({ currentView, analysisData, selectedColumn, isLoading 
       mountRef.current.appendChild(renderer.domElement);
     }
 
-    setupLighting();
-    window.addEventListener('resize', handleResize);
-  };
-
-  const setupLighting = () => {
-    const scene = sceneRef.current;
-    
+    // Ambient lighting for visibility
     const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
     scene.add(ambientLight);
 
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    directionalLight.position.set(0, 20, 15);
+    directionalLight.position.set(10, 10, 10);
     scene.add(directionalLight);
-
-    const leftLight = new THREE.PointLight(0x3b82f6, 0.8, 40);
-    leftLight.position.set(-40, 10, -10);
-    scene.add(leftLight);
-
-    const rightLight = new THREE.PointLight(0x06b6d4, 0.8, 40);
-    rightLight.position.set(40, 10, -10);
-    scene.add(rightLight);
-  };
-
-  const createDot = () => {
-    const dotGeometry = new THREE.SphereGeometry(0.2, 12, 8);
-    const dotMaterial = new THREE.MeshBasicMaterial({ 
-      color: 0x00aaff,
-      transparent: true,
-      opacity: 0.9
-    });
-    
-    const dot = new THREE.Mesh(dotGeometry, dotMaterial);
-    dot.position.set(0, 0, -15);
-    dot.visible = true;
-    sceneRef.current.add(dot);
-    dotRef.current = dot;
-  };
-
-  const createTextBlocks = () => {
-    const group = new THREE.Group();
-    
-    // Left text - "Simran Dhindsa"
-    for (let i = 0; i < 14; i++) {
-      const blockGeometry = new THREE.BoxGeometry(0.8, 1.2, 0.1);
-      const blockMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0x3b82f6,
-        transparent: true,
-        opacity: 0.9
-      });
-      
-      const block = new THREE.Mesh(blockGeometry, blockMaterial);
-      block.position.set(-15 + (i * 1), 3, -10);
-      group.add(block);
-    }
-    
-    // Right text - "Dhindsa"
-    for (let i = 0; i < 7; i++) {
-      const blockGeometry = new THREE.BoxGeometry(0.8, 1.2, 0.1);
-      const blockMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0x06b6d4,
-        transparent: true,
-        opacity: 0.9
-      });
-      
-      const block = new THREE.Mesh(blockGeometry, blockMaterial);
-      block.position.set(12 + (i * 1), 3, -10);
-      group.add(block);
-    }
-    
-    return group;
   };
 
   const startAnimation = () => {
-    animationStateRef.current.startTime = Date.now();
     animate();
   };
 
   const animate = () => {
     animationIdRef.current = requestAnimationFrame(animate);
+
+    const time = Date.now() * 0.001;
     
-    const now = Date.now();
-    const state = animationStateRef.current;
-    const elapsed = now - state.startTime;
-    
-    // Simple cycling animation
-    if (elapsed > 3000) { // 3 second cycles
-      // Clear current elements
-      if (currentElementRef.current) {
-        sceneRef.current.remove(currentElementRef.current);
-        currentElementRef.current = null;
-      }
-      
-      // Create new element
-      let newElement;
-      const elementIndex = Math.floor((now / 3000) % 4);
-      const side = Math.floor((now / 3000) % 2) === 0 ? 'left' : 'right';
-      const position = getPositionForSide(side);
-      
-      switch (elementIndex) {
-        case 0:
-          newElement = createDNAHelix();
-          break;
-        case 1:
-          newElement = createWaveInterference();
-          break;
-        case 2:
-          newElement = createNeuralNetwork();
-          break;
-        case 3:
-          newElement = createSoundWaves();
-          break;
-      }
-      
-      if (newElement) {
-        newElement.position.copy(position);
-        sceneRef.current.add(newElement);
-        currentElementRef.current = newElement;
-      }
-      
-      state.startTime = now;
+    // Create all elements on first load or if none exist
+    if (movingElementsRef.current.length === 0) {
+      createAllElements();
     }
     
-    // Mouse interaction
+    // Animate all elements (no theme switching - show all at once)
     const mouse = mouseRef.current;
-    if (currentElementRef.current) {
-      currentElementRef.current.rotation.y += mouse.normalizedX * 0.01;
-      currentElementRef.current.rotation.x += mouse.normalizedY * 0.005;
-    }
+    movingElementsRef.current.forEach(element => {
+      // Gentle floating motion
+      element.object.position.y = element.originalY + Math.sin(time * 1.2 + element.floatOffset) * element.verticalFloat;
+      
+      // Very subtle rotation
+      element.object.rotation.y += element.rotationSpeed;
+      element.object.rotation.z += element.rotationSpeed * 0.3;
+      
+      // Mouse interaction - subtle response to cursor
+      const mouseInfluenceX = mouse.normalizedX * element.mouseResponseX * 0.3;
+      const mouseInfluenceY = mouse.normalizedY * element.mouseResponseY * 0.2;
+      
+      element.object.position.y += mouseInfluenceY;
+      element.object.rotation.y += mouseInfluenceX * 0.003;
+    });
     
-    // Camera movement
+    // Mouse-responsive camera with wider range for high scaling
     if (cameraRef.current) {
-      const targetX = mouse.normalizedX * 3;
-      const targetY = -mouse.normalizedY * 2 + 5;
+      const targetX = mouse.normalizedX * 4;
+      const targetY = -mouse.normalizedY * 3;
       
       cameraRef.current.position.x += (targetX - cameraRef.current.position.x) * 0.02;
       cameraRef.current.position.y += (targetY - cameraRef.current.position.y) * 0.02;
       cameraRef.current.lookAt(0, 0, 0);
     }
-    
+
     if (rendererRef.current && sceneRef.current && cameraRef.current) {
       rendererRef.current.render(sceneRef.current, cameraRef.current);
     }
   };
 
   const cleanup = () => {
-    if (currentElementRef.current) {
-      sceneRef.current.remove(currentElementRef.current);
-      currentElementRef.current = null;
+    if (animationIdRef.current) {
+      cancelAnimationFrame(animationIdRef.current);
     }
-    if (dotRef.current) {
-      sceneRef.current.remove(dotRef.current);
-      dotRef.current = null;
-    }
-    if (rendererRef.current && mountRef.current) {
+    
+    clearAllElements();
+    
+    if (rendererRef.current && mountRef.current && mountRef.current.contains(rendererRef.current.domElement)) {
       mountRef.current.removeChild(rendererRef.current.domElement);
       rendererRef.current.dispose();
-    }
-  };
-
-  const handleResize = () => {
-    if (cameraRef.current && rendererRef.current) {
-      cameraRef.current.aspect = window.innerWidth / window.innerHeight;
-      cameraRef.current.updateProjectionMatrix();
-      rendererRef.current.setSize(window.innerWidth, window.innerHeight);
     }
   };
 
@@ -423,7 +593,8 @@ const ThreeBackground = ({ currentView, analysisData, selectedColumn, isLoading 
         width: '100vw',
         height: '100vh',
         zIndex: -1,
-        pointerEvents: 'none'
+        pointerEvents: 'none',
+        backgroundColor: 'transparent'
       }}
     />
   );

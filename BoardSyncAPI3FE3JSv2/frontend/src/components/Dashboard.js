@@ -111,11 +111,11 @@ const Dashboard = ({ selectedColumn, onColumnSelect, onAnalyze, loading }) => {
         {/* Header Section with Fluid Text */}
         <div className="mb-8">
           <FluidText className="text-3xl font-bold text-gray-900 mb-2 block" sensitivity={2}>
-            Ticket Synchronization
+            Pick a column and let's see how badly these two systems disagree with each other
           </FluidText>
-          <p className="text-gray-600">
-            Select a column to analyze and sync tickets between Asana and YouTrack. Now with tag/subsystem support.
-          </p>
+          {/* <p className="text-gray-600">
+           Pick a column and let's see how badly these two systems disagree with each other
+          </p> */}
         </div>
 
         {/* Column Selection with Glass Theme */}
@@ -183,7 +183,7 @@ const Dashboard = ({ selectedColumn, onColumnSelect, onAnalyze, loading }) => {
           {selectedColumn && !loading && (
             <div className="glass-panel mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200 pointer-events-none">
               <p className="text-blue-800 text-sm text-center select-none">
-                Ready to analyze <strong>{selectedColumnData?.label}</strong>
+                Let's see what breaks when we touch <strong>{selectedColumnData?.label}</strong>
               </p>
             </div>
           )}
@@ -192,7 +192,7 @@ const Dashboard = ({ selectedColumn, onColumnSelect, onAnalyze, loading }) => {
         {/* Footer Status */}
         <div className="mt-8 text-center text-sm text-gray-500">
           <FluidText sensitivity={0.5}>
-            Enhanced Asana-YouTrack Sync • v4.0 • 3D Dashboard • Tag Support • Individual Actions
+            Asana-YouTrack Sync •  v1.0  • Making Two Apps Talk to Each Other
           </FluidText>
         </div>
       </div>

@@ -50,13 +50,13 @@ function App() {
   };
 
   const handleCreateSingle = async (taskId) => {
-    console.log('Creating single ticket for task ID:', taskId); // Debug log
+    console.log('Creating single ticket for task ID:', taskId);
     setLoading(true);
     try {
       await createSingleTicket(taskId);
       await refreshAnalysis();
     } catch (error) {
-      console.error('Create single failed:', error); // Debug log
+      console.error('Create single failed:', error);
       throw new Error('Create failed: ' + error.message);
     } finally {
       setLoading(false);
@@ -86,16 +86,21 @@ function App() {
 
   return (
     <div className="App" style={{ position: 'relative', minHeight: '100vh' }}>
-      {/* 3D Background Layer - Mouse-responsive tech elements */}
-      <ThreeBackground 
-        currentView={currentView}
-        analysisData={analysisData}
-        selectedColumn={selectedColumn}
-        isLoading={loading}
-      />
+      {/* 3D Background Layer - Behind blur separator */}
+      <div className="three-background-container">
+        <ThreeBackground 
+          currentView={currentView}
+          analysisData={analysisData}
+          selectedColumn={selectedColumn}
+          isLoading={loading}
+        />
+      </div>
       
-      {/* Main Application Content - Glass themed dashboard */}
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      {/* Blur Separator Layer - Creates depth separation between 3D and UI */}
+      <div className="blur-separator" />
+      
+      {/* Main Application Content - Glass themed dashboard with enhanced layering */}
+      <div className="main-content-layer">
         {currentView === 'dashboard' ? (
           <Dashboard
             selectedColumn={selectedColumn}
