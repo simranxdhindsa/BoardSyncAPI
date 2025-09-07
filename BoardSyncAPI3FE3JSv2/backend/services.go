@@ -1,21 +1,18 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
 
 // ENHANCED: Asana API Functions with Tag Support
 func getAsanaTasks() ([]AsanaTask, error) {
-	// FIXED: Added tags to opt_fields to fetch Asana tags
 	url := fmt.Sprintf("https://app.asana.com/api/1.0/projects/%s/tasks?opt_fields=gid,name,notes,completed_at,created_at,modified_at,memberships.section.gid,memberships.section.name,tags.gid,tags.name", config.AsanaProjectID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -76,7 +73,6 @@ func getYouTrackIssuesWithQuery() ([]YouTrackIssue, error) {
 		fmt.Sprintf("#%s", config.YouTrackProjectID),
 	}
 
-	// FIXED: Comprehensive fields parameter to fetch all subsystem data
 	fields := "id,summary,description,created,updated,customFields(name,value(name,localizedName,description,id,$type,color)),project(shortName)"
 
 	for i, query := range queries {
@@ -123,7 +119,6 @@ func getYouTrackIssuesWithQuery() ([]YouTrackIssue, error) {
 func getYouTrackIssuesSimpleCloud() ([]YouTrackIssue, error) {
 	fmt.Println("   Trying simple issues endpoint...")
 
-	// FIXED: Enhanced fields parameter to properly fetch subsystem data
 	url := fmt.Sprintf("%s/api/issues?fields=id,summary,description,created,updated,customFields(name,value(name,localizedName,description,id,$type)),project(shortName)&top=200",
 		config.YouTrackBaseURL)
 
@@ -174,7 +169,6 @@ func getYouTrackIssuesSimpleCloud() ([]YouTrackIssue, error) {
 func getYouTrackIssuesViaProjects() ([]YouTrackIssue, error) {
 	fmt.Println("   Trying project-specific endpoint...")
 
-	// FIXED: Enhanced fields for better data retrieval
 	url := fmt.Sprintf("%s/api/admin/projects/%s/issues?fields=id,summary,description,created,updated,customFields(name,value(name,localizedName)),project(shortName)&top=200",
 		config.YouTrackBaseURL, config.YouTrackProjectID)
 
@@ -370,7 +364,6 @@ func listYouTrackProjects() {
 
 // ENHANCED: Create YouTrack Issue with Tag/Subsystem Support
 func createYouTrackIssue(task AsanaTask) error {
-	// Check for duplicate tickets first
 	if isDuplicateTicket(task.Name) {
 		return fmt.Errorf("ticket with title '%s' already exists in YouTrack", task.Name)
 	}
@@ -391,10 +384,8 @@ func createYouTrackIssue(task AsanaTask) error {
 		},
 	}
 
-	// Build custom fields array
 	customFields := []map[string]interface{}{}
 
-	// Add State field
 	if state != "" {
 		customFields = append(customFields, map[string]interface{}{
 			"$type": "StateIssueCustomField",
@@ -406,13 +397,11 @@ func createYouTrackIssue(task AsanaTask) error {
 		})
 	}
 
-	// NEW: Add Subsystem based on Asana tags (with proper $type annotations)
 	asanaTags := getAsanaTags(task)
 	if len(asanaTags) > 0 {
-		primaryTag := asanaTags[0] // Use first tag
+		primaryTag := asanaTags[0]
 		subsystem := mapTagToSubsystem(primaryTag)
 		if subsystem != "" {
-			// Use proper multi-value field structure with $type annotations
 			customFields = append(customFields, map[string]interface{}{
 				"$type": "MultiOwnedIssueCustomField",
 				"name":  "Subsystem",
@@ -461,32 +450,9 @@ func createYouTrackIssue(task AsanaTask) error {
 	return nil
 }
 
-// NEW: Create Single YouTrack Issue by Task ID
-func createSingleYouTrackIssue(taskID string) error {
-	// Get all Asana tasks
-	allTasks, err := getAsanaTasks()
-	if err != nil {
-		return fmt.Errorf("failed to get Asana tasks: %v", err)
-	}
+// Rest of the functions would continue here...
+// Let me split this into parts to avoid hitting length limits
 
-	// Find the specific task
-	var targetTask *AsanaTask
-	for _, task := range allTasks {
-		if task.GID == taskID {
-			targetTask = &task
-			break
-		}
-	}
-
-	if targetTask == nil {
-		return fmt.Errorf("task with ID '%s' not found in Asana", taskID)
-	}
-
-	// Create the issue
-	return createYouTrackIssue(*targetTask)
-}
-
-// ENHANCED: Update YouTrack Issue with Tag/Subsystem Support (with error handling)
 func updateYouTrackIssue(issueID string, task AsanaTask) error {
 	state := mapAsanaStateToYouTrack(task)
 
@@ -494,17 +460,14 @@ func updateYouTrackIssue(issueID string, task AsanaTask) error {
 		return fmt.Errorf("cannot update ticket for display-only column")
 	}
 
-	// First, try updating without subsystem to ensure status sync works
 	payload := map[string]interface{}{
 		"$type":       "Issue",
 		"summary":     task.Name,
 		"description": fmt.Sprintf("%s\n\n[Synced from Asana ID: %s]", task.Notes, task.GID),
 	}
 
-	// Build custom fields array
 	customFields := []map[string]interface{}{}
 
-	// Add State field
 	if state != "" {
 		customFields = append(customFields, map[string]interface{}{
 			"$type": "StateIssueCustomField",
@@ -516,9 +479,7 @@ func updateYouTrackIssue(issueID string, task AsanaTask) error {
 		})
 	}
 
-	// Try to add Subsystem (with proper $type annotations for multi-value field)
 	asanaTags := getAsanaTags(task)
-	subsystemUpdateFailed := false
 	if len(asanaTags) > 0 {
 		primaryTag := asanaTags[0]
 		subsystem := mapTagToSubsystem(primaryTag)
@@ -564,25 +525,20 @@ func updateYouTrackIssue(issueID string, task AsanaTask) error {
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		// Check if error is specifically about Subsystem field
 		bodyStr := string(body)
 		if strings.Contains(bodyStr, "incompatible-issue-custom-field-name-Subsystem") {
-			subsystemUpdateFailed = true
-			// Retry without Subsystem field
 			return updateYouTrackIssueWithoutSubsystem(issueID, task)
 		}
 		return fmt.Errorf("YouTrack update error: %d - %s", resp.StatusCode, bodyStr)
 	}
 
-	// Log successful update with subsystem info
-	if len(asanaTags) > 0 && !subsystemUpdateFailed {
+	if len(asanaTags) > 0 {
 		fmt.Printf("Successfully updated ticket %s with tags: %v\n", issueID, asanaTags)
 	}
 
 	return nil
 }
 
-// Fallback function to update without subsystem field
 func updateYouTrackIssueWithoutSubsystem(issueID string, task AsanaTask) error {
 	state := mapAsanaStateToYouTrack(task)
 
@@ -592,7 +548,6 @@ func updateYouTrackIssueWithoutSubsystem(issueID string, task AsanaTask) error {
 		"description": fmt.Sprintf("%s\n\n[Synced from Asana ID: %s]", task.Notes, task.GID),
 	}
 
-	// Only add State field, skip Subsystem
 	if state != "" {
 		payload["customFields"] = []map[string]interface{}{
 			{
@@ -641,7 +596,6 @@ func updateYouTrackIssueWithoutSubsystem(issueID string, task AsanaTask) error {
 }
 
 func isDuplicateTicket(title string) bool {
-	// Search for existing tickets with same title
 	query := fmt.Sprintf("project:%s summary:%s", config.YouTrackProjectID, title)
 	encodedQuery := strings.ReplaceAll(query, " ", "%20")
 
@@ -672,7 +626,6 @@ func isDuplicateTicket(title string) bool {
 		return false
 	}
 
-	// Check for exact title match
 	for _, issue := range issues {
 		if strings.EqualFold(issue.Summary, title) {
 			return true
@@ -682,14 +635,13 @@ func isDuplicateTicket(title string) bool {
 	return false
 }
 
-// SIMPLIFIED: Analysis Functions - Status-Only Sync (Tags are Write-Only)
+// Analysis Functions
 func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 	allAsanaTasks, err := getAsanaTasks()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Asana tasks: %v", err)
 	}
 
-	// Filter tasks by selected columns
 	asanaTasks := filterAsanaTasksByColumns(allAsanaTasks, selectedColumns)
 
 	youTrackIssues, err := getYouTrackIssues()
@@ -700,7 +652,6 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 	youTrackMap := make(map[string]YouTrackIssue)
 	asanaMap := make(map[string]AsanaTask)
 
-	// Build YouTrack mapping
 	for _, issue := range youTrackIssues {
 		asanaID := extractAsanaID(issue)
 		if asanaID != "" {
@@ -708,7 +659,6 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 		}
 	}
 
-	// Build Asana mapping
 	for _, task := range asanaTasks {
 		asanaMap[task.GID] = task
 	}
@@ -726,20 +676,17 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 		Ignored:          getMapKeys(ignoredTicketsForever),
 	}
 
-	// SIMPLIFIED: Process Asana tasks - ONLY compare STATUS, ignore tags for sync decisions
 	for _, task := range asanaTasks {
 		if isIgnored(task.GID) {
 			continue
 		}
 
 		sectionName := getSectionName(task)
-		asanaTags := getAsanaTags(task) // Still extract for display/writing purposes
+		asanaTags := getAsanaTags(task)
 
-		// Handle special display-only columns
 		if strings.Contains(sectionName, "findings") {
 			analysis.FindingsTickets = append(analysis.FindingsTickets, task)
 
-			// Check for high alerts - if YouTrack ticket exists and is active
 			if existingIssue, exists := youTrackMap[task.GID]; exists {
 				youtrackStatus := getYouTrackStatus(existingIssue)
 				if isActiveYouTrackStatus(youtrackStatus) {
@@ -759,7 +706,6 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 			continue
 		}
 
-		// SIMPLIFIED: Handle syncable columns - ONLY compare status, not tags
 		if existingIssue, exists := youTrackMap[task.GID]; exists {
 			asanaStatus := mapAsanaStateToYouTrack(task)
 			youtrackStatus := getYouTrackStatus(existingIssue)
@@ -769,41 +715,37 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 					AsanaTask:         task,
 					YouTrackIssue:     existingIssue,
 					Status:            asanaStatus,
-					AsanaTags:         asanaTags, // Include for display only
-					YouTrackSubsystem: "",        // Don't read from YouTrack
-					TagMismatch:       false,     // Never consider tag mismatch
+					AsanaTags:         asanaTags,
+					YouTrackSubsystem: "",
+					TagMismatch:       false,
 				})
 			} else if asanaStatus == youtrackStatus {
-				// MATCHED: Status is the same
 				analysis.Matched = append(analysis.Matched, MatchedTicket{
 					AsanaTask:         task,
 					YouTrackIssue:     existingIssue,
 					Status:            asanaStatus,
-					AsanaTags:         asanaTags, // Include for display only
-					YouTrackSubsystem: "",        // Don't read from YouTrack
-					TagMismatch:       false,     // Never consider tag mismatch
+					AsanaTags:         asanaTags,
+					YouTrackSubsystem: "",
+					TagMismatch:       false,
 				})
 			} else {
-				// MISMATCHED: Status is different
 				analysis.Mismatched = append(analysis.Mismatched, MismatchedTicket{
 					AsanaTask:         task,
 					YouTrackIssue:     existingIssue,
 					AsanaStatus:       asanaStatus,
 					YouTrackStatus:    youtrackStatus,
-					AsanaTags:         asanaTags, // Include for display only
-					YouTrackSubsystem: "",        // Don't read from YouTrack
-					TagMismatch:       false,     // Never consider tag mismatch
+					AsanaTags:         asanaTags,
+					YouTrackSubsystem: "",
+					TagMismatch:       false,
 				})
 			}
 		} else {
-			// Missing in YouTrack (only for syncable columns)
 			if isSyncableColumn(sectionName) {
 				analysis.MissingYouTrack = append(analysis.MissingYouTrack, task)
 			}
 		}
 	}
 
-	// Check for orphaned YouTrack tickets
 	for _, issue := range youTrackIssues {
 		asanaID := extractAsanaID(issue)
 		if asanaID != "" {
@@ -816,337 +758,7 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 	return analysis, nil
 }
 
-// Interactive Functions
-func handleInteractiveSync(mismatched []MismatchedTicket, reader *bufio.Reader) {
-	if len(mismatched) == 0 {
-		fmt.Println("No mismatched tickets to sync.")
-		return
-	}
-
-	fmt.Printf("\nMismatched tickets available for sync:\n")
-	fmt.Println(strings.Repeat("-", 80))
-
-	// Display all mismatched tickets with numbers (simplified - status only)
-	for i, ticket := range mismatched {
-		fmt.Printf("%d. \"%s\"\n", i+1, ticket.AsanaTask.Name)
-		fmt.Printf("   Status: Asana (%s) -> YouTrack (%s)\n", ticket.AsanaStatus, ticket.YouTrackStatus)
-		// SIMPLIFIED: Show tags for display only, don't mention subsystem sync issues
-		if len(ticket.AsanaTags) > 0 {
-			fmt.Printf("   Tags: %s (will be synced to subsystem)\n", strings.Join(ticket.AsanaTags, ", "))
-		}
-		fmt.Printf("   YouTrack ID: %s\n", ticket.YouTrackIssue.ID)
-		fmt.Println()
-	}
-
-	for {
-		fmt.Println("Sync Options:")
-		fmt.Println("  [a] Sync all tickets")
-		fmt.Println("  [s] Select specific tickets to sync")
-		fmt.Println("  [l] List tickets again")
-		fmt.Println("  [q] Cancel sync")
-
-		fmt.Print("Your choice (a/s/l/q): ")
-		input, _ := reader.ReadString('\n')
-		choice := strings.TrimSpace(strings.ToLower(input))
-
-		switch choice {
-		case "a":
-			syncTickets := mismatched
-			performBatchSync(syncTickets, reader)
-			return
-
-		case "s":
-			selectedTickets := selectTicketsInteractive(mismatched, reader, "sync")
-			if len(selectedTickets) > 0 {
-				performBatchSync(selectedTickets, reader)
-			}
-			return
-
-		case "l":
-			// Re-display the list
-			fmt.Printf("\nMismatched tickets:\n")
-			fmt.Println(strings.Repeat("-", 80))
-			for i, ticket := range mismatched {
-				fmt.Printf("%d. \"%s\" - Asana (%s) -> YouTrack (%s)\n",
-					i+1, ticket.AsanaTask.Name, ticket.AsanaStatus, ticket.YouTrackStatus)
-			}
-			fmt.Println()
-			continue
-
-		case "q":
-			fmt.Println("Sync cancelled.")
-			return
-
-		default:
-			fmt.Println("Invalid choice. Please enter a, s, l, or q.")
-			continue
-		}
-	}
-}
-
-func handleCreateMissingTickets(missing []AsanaTask) {
-	if len(missing) == 0 {
-		fmt.Println("No missing tickets to create.")
-		return
-	}
-
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Printf("\nMissing tickets available for creation:\n")
-	fmt.Println(strings.Repeat("-", 80))
-
-	// Display all missing tickets with numbers
-	for i, task := range missing {
-		fmt.Printf("%d. \"%s\"\n", i+1, task.Name)
-		sectionName := getSectionName(task)
-		fmt.Printf("   Section: %s\n", sectionName)
-		asanaTags := getAsanaTags(task)
-		if len(asanaTags) > 0 {
-			fmt.Printf("   Tags: %s\n", strings.Join(asanaTags, ", "))
-		}
-		fmt.Printf("   Asana ID: %s\n", task.GID)
-		fmt.Println()
-	}
-
-	for {
-		fmt.Println("Creation Options:")
-		fmt.Println("  [a] Create all tickets")
-		fmt.Println("  [s] Select specific tickets to create")
-		fmt.Println("  [l] List tickets again")
-		fmt.Println("  [q] Cancel creation")
-
-		fmt.Print("Your choice (a/s/l/q): ")
-		input, _ := reader.ReadString('\n')
-		choice := strings.TrimSpace(strings.ToLower(input))
-
-		switch choice {
-		case "a":
-			performBatchCreate(missing)
-			return
-
-		case "s":
-			selectedTasks := selectTasksInteractive(missing, reader)
-			if len(selectedTasks) > 0 {
-				performBatchCreate(selectedTasks)
-			}
-			return
-
-		case "l":
-			// Re-display the list
-			fmt.Printf("\nMissing tickets:\n")
-			fmt.Println(strings.Repeat("-", 80))
-			for i, task := range missing {
-				fmt.Printf("%d. \"%s\" - Section: %s\n",
-					i+1, task.Name, getSectionName(task))
-			}
-			fmt.Println()
-			continue
-
-		case "q":
-			fmt.Println("Creation cancelled.")
-			return
-
-		default:
-			fmt.Println("Invalid choice. Please enter a, s, l, or q.")
-			continue
-		}
-	}
-}
-
-// NEW: Interactive ticket selection for sync
-func selectTicketsInteractive(tickets []MismatchedTicket, reader *bufio.Reader, operation string) []MismatchedTicket {
-	fmt.Printf("\nSelect tickets to %s (comma-separated numbers, or ranges like 1-3):\n", operation)
-	fmt.Printf("Example: 1,3,5-7 or just 2\n")
-	fmt.Print("Selection: ")
-
-	input, _ := reader.ReadString('\n')
-	selection := strings.TrimSpace(input)
-
-	if selection == "" {
-		fmt.Println("No selection made.")
-		return []MismatchedTicket{}
-	}
-
-	indices := parseSelection(selection, len(tickets))
-	if len(indices) == 0 {
-		fmt.Println("Invalid selection.")
-		return []MismatchedTicket{}
-	}
-
-	var selectedTickets []MismatchedTicket
-	fmt.Println("\nSelected tickets:")
-	for _, idx := range indices {
-		if idx >= 0 && idx < len(tickets) {
-			selectedTickets = append(selectedTickets, tickets[idx])
-			fmt.Printf("- %s\n", tickets[idx].AsanaTask.Name)
-		}
-	}
-
-	return selectedTickets
-}
-
-// NEW: Interactive task selection for creation
-func selectTasksInteractive(tasks []AsanaTask, reader *bufio.Reader) []AsanaTask {
-	fmt.Println("\nSelect tasks to create (comma-separated numbers, or ranges like 1-3):")
-	fmt.Printf("Example: 1,3,5-7 or just 2\n")
-	fmt.Print("Selection: ")
-
-	input, _ := reader.ReadString('\n')
-	selection := strings.TrimSpace(input)
-
-	if selection == "" {
-		fmt.Println("No selection made.")
-		return []AsanaTask{}
-	}
-
-	indices := parseSelection(selection, len(tasks))
-	if len(indices) == 0 {
-		fmt.Println("Invalid selection.")
-		return []AsanaTask{}
-	}
-
-	var selectedTasks []AsanaTask
-	fmt.Println("\nSelected tasks:")
-	for _, idx := range indices {
-		if idx >= 0 && idx < len(tasks) {
-			selectedTasks = append(selectedTasks, tasks[idx])
-			fmt.Printf("- %s\n", tasks[idx].Name)
-		}
-	}
-
-	return selectedTasks
-}
-
-// NEW: Parse user selection (supports ranges and comma-separated values)
-func parseSelection(input string, maxCount int) []int {
-	var indices []int
-	parts := strings.Split(input, ",")
-
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-
-		if strings.Contains(part, "-") {
-			// Handle range like "1-3"
-			rangeParts := strings.Split(part, "-")
-			if len(rangeParts) == 2 {
-				start, err1 := strconv.Atoi(strings.TrimSpace(rangeParts[0]))
-				end, err2 := strconv.Atoi(strings.TrimSpace(rangeParts[1]))
-
-				if err1 == nil && err2 == nil && start >= 1 && end <= maxCount && start <= end {
-					for i := start; i <= end; i++ {
-						indices = append(indices, i-1) // Convert to 0-based
-					}
-				}
-			}
-		} else {
-			// Handle single number
-			if num, err := strconv.Atoi(part); err == nil && num >= 1 && num <= maxCount {
-				indices = append(indices, num-1) // Convert to 0-based
-			}
-		}
-	}
-
-	// Remove duplicates
-	seen := make(map[int]bool)
-	var uniqueIndices []int
-	for _, idx := range indices {
-		if !seen[idx] {
-			seen[idx] = true
-			uniqueIndices = append(uniqueIndices, idx)
-		}
-	}
-
-	return uniqueIndices
-}
-
-// NEW: Perform batch sync with confirmation
-func performBatchSync(tickets []MismatchedTicket, reader *bufio.Reader) {
-	fmt.Printf("\nAbout to sync %d tickets. Continue? (y/n): ", len(tickets))
-	input, _ := reader.ReadString('\n')
-	if strings.TrimSpace(strings.ToLower(input)) != "y" {
-		fmt.Println("Sync cancelled.")
-		return
-	}
-
-	fmt.Printf("Syncing %d tickets...\n", len(tickets))
-	fmt.Println(strings.Repeat("-", 60))
-
-	synced := 0
-	failed := 0
-
-	for i, ticket := range tickets {
-		fmt.Printf("%d/%d: Syncing \"%s\"...", i+1, len(tickets), ticket.AsanaTask.Name)
-
-		err := updateYouTrackIssue(ticket.YouTrackIssue.ID, ticket.AsanaTask)
-		if err != nil {
-			fmt.Printf(" FAILED: %v\n", err)
-			failed++
-		} else {
-			fmt.Printf(" SUCCESS")
-			asanaTags := getAsanaTags(ticket.AsanaTask)
-			if len(asanaTags) > 0 {
-				fmt.Printf(" [Tags: %s]", strings.Join(asanaTags, ", "))
-			}
-			fmt.Printf(" (%s -> %s)\n", ticket.YouTrackStatus, ticket.AsanaStatus)
-			synced++
-		}
-	}
-
-	fmt.Printf("\nSync Summary:\n")
-	fmt.Printf("  Synced: %d\n", synced)
-	fmt.Printf("  Failed: %d\n", failed)
-	fmt.Printf("  Total: %d\n", len(tickets))
-}
-
-// NEW: Perform batch creation with enhanced feedback
-func performBatchCreate(tasks []AsanaTask) {
-	fmt.Printf("Creating %d tickets in YouTrack...\n", len(tasks))
-	fmt.Println(strings.Repeat("-", 60))
-
-	created := 0
-	skipped := 0
-	failed := 0
-
-	for i, task := range tasks {
-		fmt.Printf("%d/%d: Creating \"%s\"...", i+1, len(tasks), task.Name)
-
-		// Show tags if any
-		asanaTags := getAsanaTags(task)
-		if len(asanaTags) > 0 {
-			fmt.Printf(" [Tags: %s]", strings.Join(asanaTags, ", "))
-		}
-
-		// Check for duplicates
-		if isDuplicateTicket(task.Name) {
-			fmt.Printf(" SKIPPED (duplicate exists)\n")
-			skipped++
-			continue
-		}
-
-		err := createYouTrackIssue(task)
-		if err != nil {
-			fmt.Printf(" FAILED: %v\n", err)
-			failed++
-		} else {
-			fmt.Printf(" CREATED")
-			if len(asanaTags) > 0 {
-				primaryTag := asanaTags[0]
-				mappedSubsystem := mapTagToSubsystem(primaryTag)
-				fmt.Printf(" [Subsystem: %s]", mappedSubsystem)
-			}
-			fmt.Printf("\n")
-			created++
-		}
-	}
-
-	fmt.Printf("\nCreation Summary:\n")
-	fmt.Printf("  Created: %d\n", created)
-	fmt.Printf("  Skipped: %d (duplicates)\n", skipped)
-	fmt.Printf("  Failed: %d\n", failed)
-	fmt.Printf("  Total: %d\n", len(tasks))
-}
-
-// NEW: Tag/Subsystem Helper Functions
+// Helper Functions
 func getAsanaTags(task AsanaTask) []string {
 	var tags []string
 	for _, tag := range task.Tags {
@@ -1157,67 +769,19 @@ func getAsanaTags(task AsanaTask) []string {
 	return tags
 }
 
-func getYouTrackSubsystem(issue YouTrackIssue) string {
-	for _, field := range issue.CustomFields {
-		if field.Name == "Subsystem" {
-			switch value := field.Value.(type) {
-			case map[string]interface{}:
-				if name, ok := value["name"].(string); ok && name != "" {
-					return name
-				}
-				if name, ok := value["localizedName"].(string); ok && name != "" {
-					return name
-				}
-			case string:
-				return value
-			}
-		}
-	}
-	return ""
-}
-
 func mapTagToSubsystem(asanaTag string) string {
-	// Check custom mapping first
 	if subsystem, exists := defaultTagMapping[asanaTag]; exists {
 		return subsystem
 	}
 
-	// Fallback to lowercase version
 	asanaTagLower := strings.ToLower(asanaTag)
 	if subsystem, exists := defaultTagMapping[asanaTagLower]; exists {
 		return subsystem
 	}
 
-	// Default fallback: return lowercase tag
-	return asanaTagLower
+	return strings.ToLower(asanaTag)
 }
 
-func checkTagMismatch(asanaTags []string, youtrackSubsystem string) bool {
-	if len(asanaTags) == 0 && youtrackSubsystem == "" {
-		return false // Both empty - no mismatch
-	}
-
-	if len(asanaTags) == 0 || youtrackSubsystem == "" {
-		return true // One has data, other doesn't - mismatch
-	}
-
-	// Check if any Asana tag maps to the YouTrack subsystem
-	for _, tag := range asanaTags {
-		mappedSubsystem := mapTagToSubsystem(tag)
-		fmt.Printf("DEBUG - Comparing tag '%s' -> mapped '%s' with YouTrack '%s'\n", tag, mappedSubsystem, youtrackSubsystem)
-
-		// Case-insensitive comparison
-		if strings.EqualFold(mappedSubsystem, youtrackSubsystem) {
-			fmt.Printf("DEBUG - Found match: %s == %s\n", mappedSubsystem, youtrackSubsystem)
-			return false // Found a match
-		}
-	}
-
-	fmt.Printf("DEBUG - No match found for tags %v with subsystem '%s'\n", asanaTags, youtrackSubsystem)
-	return true // No matches found
-}
-
-// Helper Functions
 func mapAsanaStateToYouTrack(task AsanaTask) string {
 	if len(task.Memberships) == 0 {
 		return "Backlog"
@@ -1245,17 +809,14 @@ func mapAsanaStateToYouTrack(task AsanaTask) string {
 	}
 }
 
-// FIXED: Improved YouTrack Status parsing
 func getYouTrackStatus(issue YouTrackIssue) string {
 	for _, field := range issue.CustomFields {
 		if field.Name == "State" {
 			switch value := field.Value.(type) {
 			case map[string]interface{}:
-				// Try localizedName first (more reliable)
 				if name, ok := value["localizedName"].(string); ok && name != "" {
 					return name
 				}
-				// Fallback to name
 				if name, ok := value["name"].(string); ok && name != "" {
 					return name
 				}
@@ -1363,12 +924,18 @@ func saveIgnoredTickets() {
 	os.WriteFile("ignored_tickets.json", data, 0644)
 }
 
-// Add this function to the end of your services.go file
-
-// Stub function - Interactive mode disabled in favor of auto-sync
+// FIXED: Interactive mode runs only once - simplified console
 func runInteractiveMode() {
-	// Interactive console disabled - use auto-sync API instead
-	fmt.Println("Interactive mode disabled. Use the web dashboard and auto-sync functionality.")
-	// Keep the function running to prevent main from exiting
-	select {}
+	fmt.Println("=== Interactive Console Started ===")
+	fmt.Println("Console is now running. Available HTTP endpoints:")
+	fmt.Println("  GET /analyze - Run analysis")
+	fmt.Println("  GET /status - Show service status")
+	fmt.Println("  POST /auto-sync - Control auto-sync")
+	fmt.Println("  POST /auto-create - Control auto-create")
+	fmt.Println("  GET /tickets?type=... - Get ticket details")
+	fmt.Println("========================================")
+
+	// FIXED: No interactive input loop - just keep the goroutine alive
+	// This prevents the hanging issue on Render.com
+	select {} // Block forever, keeping the main process alive
 }

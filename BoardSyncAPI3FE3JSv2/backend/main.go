@@ -43,7 +43,9 @@ func main() {
 	http.HandleFunc("/create", createMissingTicketsHandler)
 	http.HandleFunc("/sync", syncMismatchedTicketsHandler)
 	http.HandleFunc("/ignore", manageIgnoredTicketsHandler)
-	http.HandleFunc("/auto-sync", autoSyncHandler) // NEW ENDPOINT
+	http.HandleFunc("/auto-sync", autoSyncHandler)
+	http.HandleFunc("/auto-create", autoCreateHandler)
+	http.HandleFunc("/tickets", getTicketsByTypeHandler)
 
 	fmt.Printf("Server starting on port %s\n", config.Port)
 	fmt.Println("Available endpoints:")
@@ -54,10 +56,13 @@ func main() {
 	fmt.Println("   POST /create-single  - Create individual ticket")
 	fmt.Println("   GET/POST /sync  - Sync mismatched tickets")
 	fmt.Println("   GET/POST /ignore - Manage ignored tickets")
-	fmt.Println("   GET/POST /auto-sync - Control auto-sync functionality") // NEW ENDPOINT
+	fmt.Println("   GET/POST /auto-sync - Control auto-sync functionality")
+	fmt.Println("   GET/POST /auto-create - Control auto-create functionality")
+	fmt.Println("   GET  /tickets   - Get tickets by type")
 
-	// 🚫 Disable interactive mode on Render
+	// Run interactive mode only once on startup for local dev
 	if os.Getenv("RENDER") == "" {
+		fmt.Println("Starting interactive console...")
 		go runInteractiveMode()
 	}
 
@@ -73,7 +78,7 @@ func loadConfig() {
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" // default for local dev
+		port = "8080"
 	}
 
 	config = Config{

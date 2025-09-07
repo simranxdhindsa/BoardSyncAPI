@@ -28,7 +28,6 @@ type AsanaTask struct {
 			Name string `json:"name"`
 		} `json:"section"`
 	} `json:"memberships"`
-	// NEW: Added tag support for Asana tasks
 	Tags []struct {
 		GID  string `json:"gid"`
 		Name string `json:"name"`
@@ -70,24 +69,22 @@ type TicketAnalysis struct {
 }
 
 type MatchedTicket struct {
-	AsanaTask     AsanaTask     `json:"asana_task"`
-	YouTrackIssue YouTrackIssue `json:"youtrack_issue"`
-	Status        string        `json:"status"`
-	// NEW: Added tag/subsystem fields for matched tickets
-	AsanaTags         []string `json:"asana_tags"`
-	YouTrackSubsystem string   `json:"youtrack_subsystem"`
-	TagMismatch       bool     `json:"tag_mismatch"`
+	AsanaTask         AsanaTask     `json:"asana_task"`
+	YouTrackIssue     YouTrackIssue `json:"youtrack_issue"`
+	Status            string        `json:"status"`
+	AsanaTags         []string      `json:"asana_tags"`
+	YouTrackSubsystem string        `json:"youtrack_subsystem"`
+	TagMismatch       bool          `json:"tag_mismatch"`
 }
 
 type MismatchedTicket struct {
-	AsanaTask      AsanaTask     `json:"asana_task"`
-	YouTrackIssue  YouTrackIssue `json:"youtrack_issue"`
-	AsanaStatus    string        `json:"asana_status"`
-	YouTrackStatus string        `json:"youtrack_status"`
-	// NEW: Added tag/subsystem fields for mismatched tickets
-	AsanaTags         []string `json:"asana_tags"`
-	YouTrackSubsystem string   `json:"youtrack_subsystem"`
-	TagMismatch       bool     `json:"tag_mismatch"`
+	AsanaTask         AsanaTask     `json:"asana_task"`
+	YouTrackIssue     YouTrackIssue `json:"youtrack_issue"`
+	AsanaStatus       string        `json:"asana_status"`
+	YouTrackStatus    string        `json:"youtrack_status"`
+	AsanaTags         []string      `json:"asana_tags"`
+	YouTrackSubsystem string        `json:"youtrack_subsystem"`
+	TagMismatch       bool          `json:"tag_mismatch"`
 }
 
 type FindingsAlert struct {
@@ -103,7 +100,6 @@ type SyncRequest struct {
 	Action   string `json:"action"`
 }
 
-// NEW: Single ticket creation request
 type CreateSingleRequest struct {
 	TaskID string `json:"task_id"`
 }
@@ -114,10 +110,10 @@ type IgnoreRequest struct {
 	Type     string `json:"type"`
 }
 
-// NEW: Auto-sync control structures
+// Auto-sync control structures
 type AutoSyncRequest struct {
 	Action   string `json:"action"`   // "start" or "stop"
-	Interval int    `json:"interval"` // interval in seconds (optional, defaults to 60)
+	Interval int    `json:"interval"` // interval in seconds (optional, defaults to 15)
 }
 
 type AutoSyncStatus struct {
@@ -129,7 +125,28 @@ type AutoSyncStatus struct {
 	LastSyncInfo string    `json:"last_sync_info"`
 }
 
-// NEW: Tag mapping configuration
+// NEW: Auto-create control structures
+type AutoCreateRequest struct {
+	Action   string `json:"action"`   // "start" or "stop"
+	Interval int    `json:"interval"` // interval in seconds (optional, defaults to 15)
+}
+
+type AutoCreateStatus struct {
+	Running        bool      `json:"running"`
+	Interval       int       `json:"interval"`
+	LastCreate     time.Time `json:"last_create"`
+	NextCreate     time.Time `json:"next_create"`
+	CreateCount    int       `json:"create_count"`
+	LastCreateInfo string    `json:"last_create_info"`
+}
+
+// NEW: Ticket details request
+type TicketsRequest struct {
+	Type   string `json:"type"`   // "matched", "mismatched", "missing", "ignored", etc.
+	Column string `json:"column"` // column filter
+}
+
+// Tag mapping configuration
 type TagMapping struct {
 	AsanaTag          string `json:"asana_tag"`
 	YouTrackSubsystem string `json:"youtrack_subsystem"`
@@ -141,20 +158,28 @@ var lastSyncTime time.Time
 var ignoredTicketsTemp = make(map[string]bool)
 var ignoredTicketsForever = make(map[string]bool)
 
-// NEW: Auto-sync global variables
+// Auto-sync global variables
 var autoSyncRunning = false
-var autoSyncInterval = 60 // seconds
+var autoSyncInterval = 15 // CHANGED: default to 15 seconds
 var autoSyncTicker *time.Ticker
 var autoSyncDone chan bool
 var autoSyncCount = 0
 var autoSyncLastInfo = ""
+
+// NEW: Auto-create global variables
+var autoCreateRunning = false
+var autoCreateInterval = 15 // default to 15 seconds
+var autoCreateTicker *time.Ticker
+var autoCreateDone chan bool
+var autoCreateCount = 0
+var autoCreateLastInfo = ""
 
 // Column definitions
 var syncableColumns = []string{"backlog", "in progress", "dev", "stage", "blocked"}
 var displayOnlyColumns = []string{"ready for stage", "findings"}
 var allColumns = append(syncableColumns, displayOnlyColumns...)
 
-// NEW: Default tag-to-subsystem mapping
+// Default tag-to-subsystem mapping
 var defaultTagMapping = map[string]string{
 	"Mobile":      "mobile",
 	"Web":         "web",

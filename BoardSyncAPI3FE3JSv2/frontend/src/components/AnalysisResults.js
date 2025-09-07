@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, RefreshCw, Tag } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, RefreshCw, Tag, Eye, EyeOff } from 'lucide-react';
 import ReAnalysisPanel from './ReAnalysisPanel';
+import TicketDetailView from './TicketDetailView';
 
 const AnalysisResults = ({ 
   analysisData, 
@@ -19,10 +20,36 @@ const AnalysisResults = ({
   const [createAllLoading, setCreateAllLoading] = useState(false);
   const [syncedTickets, setSyncedTickets] = useState(new Set());
   const [createdTickets, setCreatedTickets] = useState(new Set());
+  
+  // NEW: Detail view state
+  const [detailView, setDetailView] = useState(null); // { type: 'matched', column: 'all' }
 
   if (!analysisData) return null;
 
   const { analysis, summary } = analysisData;
+
+  // NEW: Handle clicking on summary cards to drill down
+  const handleSummaryCardClick = (type) => {
+    setDetailView({ type, column: selectedColumn });
+  };
+
+  // NEW: Handle back from detail view
+  const handleBackFromDetail = () => {
+    setDetailView(null);
+  };
+
+  // Show detail view if selected
+  if (detailView) {
+    return (
+      <TicketDetailView
+        type={detailView.type}
+        column={detailView.column}
+        onBack={handleBackFromDetail}
+        onSync={onSync}
+        onCreateSingle={onCreateSingle}
+      />
+    );
+  }
 
   // Handle individual ticket sync
   const handleSyncTicket = async (ticketId) => {
@@ -180,9 +207,9 @@ const AnalysisResults = ({
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Analysis Results - {selectedColumn.toUpperCase()}
+            Analysis Results - {selectedColumn?.toUpperCase?.() || 'ALL'}
           </h1>
-          <p className="text-gray-600">Review mismatches, sync tickets, and manage tags</p>
+          <p className="text-gray-600">Review mismatches, sync tickets, and manage tags. Click on any summary card to see detailed views.</p>
         </div>
 
         {/* High Priority Alerts */}
@@ -202,9 +229,12 @@ const AnalysisResults = ({
           </div>
         )}
 
-        {/* Summary Cards with Glass Theme */}
+        {/* Summary Cards with Glass Theme - NOW CLICKABLE */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-          <div className="glass-panel bg-green-50 border border-green-200 rounded-lg p-4">
+          <div 
+            className="glass-panel bg-green-50 border border-green-200 rounded-lg p-4 cursor-pointer hover:shadow-lg transition-all"
+            onClick={() => handleSummaryCardClick('matched')}
+          >
             <div className="flex items-center">
               <CheckCircle className="w-6 h-6 text-green-600 mr-2" />
               <div>
@@ -212,9 +242,16 @@ const AnalysisResults = ({
                 <p className="text-2xl font-bold text-green-600">{summary.matched}</p>
               </div>
             </div>
+            <div className="mt-2 flex items-center text-xs text-green-700">
+              <Eye className="w-3 h-3 mr-1" />
+              Click to view details
+            </div>
           </div>
 
-          <div className="glass-panel bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div 
+            className="glass-panel bg-yellow-50 border border-yellow-200 rounded-lg p-4 cursor-pointer hover:shadow-lg transition-all"
+            onClick={() => handleSummaryCardClick('mismatched')}
+          >
             <div className="flex items-center">
               <Clock className="w-6 h-6 text-yellow-600 mr-2" />
               <div>
@@ -222,9 +259,16 @@ const AnalysisResults = ({
                 <p className="text-2xl font-bold text-yellow-600">{summary.mismatched}</p>
               </div>
             </div>
+            <div className="mt-2 flex items-center text-xs text-yellow-700">
+              <Eye className="w-3 h-3 mr-1" />
+              Click to view details
+            </div>
           </div>
 
-          <div className="glass-panel bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div 
+            className="glass-panel bg-blue-50 border border-blue-200 rounded-lg p-4 cursor-pointer hover:shadow-lg transition-all"
+            onClick={() => handleSummaryCardClick('missing')}
+          >
             <div className="flex items-center">
               <Plus className="w-6 h-6 text-blue-600 mr-2" />
               <div>
@@ -232,15 +276,26 @@ const AnalysisResults = ({
                 <p className="text-2xl font-bold text-blue-600">{summary.missing_youtrack}</p>
               </div>
             </div>
+            <div className="mt-2 flex items-center text-xs text-blue-700">
+              <Eye className="w-3 h-3 mr-1" />
+              Click to view details
+            </div>
           </div>
 
-          <div className="glass-panel bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div 
+            className="glass-panel bg-purple-50 border border-purple-200 rounded-lg p-4 cursor-pointer hover:shadow-lg transition-all"
+            onClick={() => handleSummaryCardClick('ignored')}
+          >
             <div className="flex items-center">
-              <Tag className="w-6 h-6 text-purple-600 mr-2" />
+              <EyeOff className="w-6 h-6 text-purple-600 mr-2" />
               <div>
-                <h3 className="text-sm font-semibold text-purple-900">Tag Issues</h3>
-                <p className="text-2xl font-bold text-purple-600">{summary.tag_mismatches || 0}</p>
+                <h3 className="text-sm font-semibold text-purple-900">Ignored</h3>
+                <p className="text-2xl font-bold text-purple-600">{summary.ignored || 0}</p>
               </div>
+            </div>
+            <div className="mt-2 flex items-center text-xs text-purple-700">
+              <Eye className="w-3 h-3 mr-1" />
+              Click to manage
             </div>
           </div>
 
@@ -276,23 +331,32 @@ const AnalysisResults = ({
               <h2 className="text-xl font-semibold text-gray-900">
                 Mismatched Tickets ({summary.mismatched})
               </h2>
-              <button 
-                onClick={handleSyncAll}
-                disabled={syncAllLoading}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center"
-              >
-                {syncAllLoading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Syncing All...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Sync All
-                  </>
-                )}
-              </button>
+              <div className="flex space-x-2">
+                <button 
+                  onClick={() => handleSummaryCardClick('mismatched')}
+                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  View All
+                </button>
+                <button 
+                  onClick={handleSyncAll}
+                  disabled={syncAllLoading}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center"
+                >
+                  {syncAllLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Syncing All...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Sync All
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
             
             <div className="overflow-x-auto">
@@ -306,7 +370,7 @@ const AnalysisResults = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {analysis.mismatched && analysis.mismatched.map((ticket) => {
+                  {analysis.mismatched && analysis.mismatched.slice(0, 5).map((ticket) => {
                     const ticketId = ticket.asana_task.gid;
                     const isSyncing = syncing[ticketId];
                     const isSynced = syncedTickets.has(ticketId);
@@ -336,17 +400,6 @@ const AnalysisResults = ({
                             <div>
                               <div className="text-xs text-gray-500 mb-1">Asana Tags:</div>
                               <TagsDisplay tags={ticket.asana_tags} />
-                            </div>
-                            <div>
-                              <div className="text-xs text-gray-500 mb-1">YouTrack Subsystem:</div>
-                              <span className="text-sm text-gray-700">
-                                {ticket.youtrack_subsystem || 'None'}
-                              </span>
-                              {ticket.tag_mismatch && (
-                                <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-1 py-0.5 rounded">
-                                  Mismatch
-                                </span>
-                              )}
                             </div>
                           </div>
                         </td>
@@ -380,6 +433,16 @@ const AnalysisResults = ({
                   })}
                 </tbody>
               </table>
+              {analysis.mismatched && analysis.mismatched.length > 5 && (
+                <div className="mt-4 text-center">
+                  <button 
+                    onClick={() => handleSummaryCardClick('mismatched')}
+                    className="text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    View all {analysis.mismatched.length} mismatched tickets →
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -391,27 +454,36 @@ const AnalysisResults = ({
               <h2 className="text-xl font-semibold text-gray-900">
                 Missing in YouTrack ({summary.missing_youtrack})
               </h2>
-              <button 
-                onClick={handleCreateAll}
-                disabled={createAllLoading}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center disabled:opacity-50"
-              >
-                {createAllLoading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Creating All...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create All
-                  </>
-                )}
-              </button>
+              <div className="flex space-x-2">
+                <button 
+                  onClick={() => handleSummaryCardClick('missing')}
+                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  View All
+                </button>
+                <button 
+                  onClick={handleCreateAll}
+                  disabled={createAllLoading}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center disabled:opacity-50"
+                >
+                  {createAllLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Creating All...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create All
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {analysis.missing_youtrack && analysis.missing_youtrack.map((task, index) => {
+              {analysis.missing_youtrack && analysis.missing_youtrack.slice(0, 6).map((task, index) => {
                 const taskId = task.gid;
                 const isCreating = creating[taskId];
                 const isCreated = createdTickets.has(taskId);
@@ -456,6 +528,17 @@ const AnalysisResults = ({
                 );
               })}
             </div>
+            
+            {analysis.missing_youtrack && analysis.missing_youtrack.length > 6 && (
+              <div className="mt-4 text-center">
+                <button 
+                  onClick={() => handleSummaryCardClick('missing')}
+                  className="text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  View all {analysis.missing_youtrack.length} missing tickets →
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -471,7 +554,7 @@ const AnalysisResults = ({
                     Ready for Stage ({summary.ready_for_stage})
                   </h3>
                   <div className="space-y-2">
-                    {analysis.ready_for_stage && analysis.ready_for_stage.map((task) => (
+                    {analysis.ready_for_stage && analysis.ready_for_stage.slice(0, 3).map((task) => (
                       <div key={task.gid} className="glass-panel bg-green-50 border border-green-200 rounded-lg p-3">
                         <p className="font-medium text-gray-900">{task.name}</p>
                         <div className="mt-1">
@@ -480,6 +563,14 @@ const AnalysisResults = ({
                         <p className="text-sm text-green-700 mt-1">Display only - not synced</p>
                       </div>
                     ))}
+                    {analysis.ready_for_stage && analysis.ready_for_stage.length > 3 && (
+                      <button 
+                        onClick={() => handleSummaryCardClick('ready_for_stage')}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        View all {analysis.ready_for_stage.length} tickets →
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -490,7 +581,7 @@ const AnalysisResults = ({
                     Findings ({summary.findings_tickets})
                   </h3>
                   <div className="space-y-2">
-                    {analysis.findings_tickets && analysis.findings_tickets.map((task) => (
+                    {analysis.findings_tickets && analysis.findings_tickets.slice(0, 3).map((task) => (
                       <div key={task.gid} className="glass-panel bg-orange-50 border border-orange-200 rounded-lg p-3">
                         <p className="font-medium text-gray-900">{task.name}</p>
                         <div className="mt-1">
@@ -499,6 +590,14 @@ const AnalysisResults = ({
                         <p className="text-sm text-orange-700 mt-1">Display only - not synced</p>
                       </div>
                     ))}
+                    {analysis.findings_tickets && analysis.findings_tickets.length > 3 && (
+                      <button 
+                        onClick={() => handleSummaryCardClick('findings')}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        View all {analysis.findings_tickets.length} tickets →
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
