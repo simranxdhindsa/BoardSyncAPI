@@ -19,6 +19,7 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 			"Individual ticket creation",
 			"Enhanced status parsing",
 			"Tag mismatch detection",
+			"Auto-sync functionality", // NEW FEATURE
 		},
 		"columns": map[string]interface{}{
 			"syncable":     syncableColumns,
@@ -42,14 +43,21 @@ func statusCheck(w http.ResponseWriter, r *http.Request) {
 		"temp_ignored":    len(ignoredTicketsTemp),
 		"forever_ignored": len(ignoredTicketsForever),
 		"tag_mappings":    len(defaultTagMapping),
+		"auto_sync": map[string]interface{}{
+			"running":   autoSyncRunning,
+			"interval":  autoSyncInterval,
+			"count":     autoSyncCount,
+			"last_info": autoSyncLastInfo,
+		},
 		"endpoints": []string{
 			"GET /health - Health check",
-			"GET /status - Service status", 
+			"GET /status - Service status",
 			"GET /analyze - Analyze ticket differences",
 			"POST /create - Create missing tickets (bulk)",
-			"POST /create-single - Create individual ticket", // NEW ENDPOINT
+			"POST /create-single - Create individual ticket",
 			"GET/POST /sync - Sync mismatched tickets",
 			"GET/POST /ignore - Manage ignored tickets",
+			"GET/POST /auto-sync - Control auto-sync functionality", // NEW ENDPOINT
 		},
 	})
 }
@@ -146,7 +154,7 @@ func createMissingTicketsHandler(w http.ResponseWriter, r *http.Request) {
 
 	for _, task := range analysis.MissingYouTrack {
 		asanaTags := getAsanaTags(task)
-		
+
 		result := map[string]interface{}{
 			"task_id":    task.GID,
 			"task_name":  task.Name,
@@ -387,7 +395,7 @@ func syncMismatchedTicketsHandler(w http.ResponseWriter, r *http.Request) {
 					"from": ticket.YouTrackStatus,
 					"to":   ticket.AsanaStatus,
 				}
-				
+
 				// Include tag sync information
 				asanaTags := getAsanaTags(ticket.AsanaTask)
 				if len(asanaTags) > 0 {
@@ -483,4 +491,211 @@ func manageIgnoredTicketsHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// NEW: Auto-sync control handler
+func autoSyncHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	switch r.Method {
+	case "GET":
+		// Return current auto-sync status
+		status := AutoSyncStatus{
+			Running:      autoSyncRunning,
+			Interval:     autoSyncInterval,
+			LastSync:     lastSyncTime,
+			SyncCount:    autoSyncCount,
+			LastSyncInfo: autoSyncLastInfo,
+		}
+
+		if autoSyncRunning {
+			status.NextSync = time.Now().Add(time.Duration(autoSyncInterval) * time.Second)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":    "success",
+			"auto_sync": status,
+			"capabilities": []string{
+				"start - Start auto-sync with specified interval",
+				"stop - Stop auto-sync",
+			},
+		})
+
+	case "POST":
+		var req AutoSyncRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":    "Invalid JSON format",
+				"expected": "Object like: {\"action\":\"start\",\"interval\":60}",
+				"example":  `{"action":"start","interval":60}`,
+			})
+			return
+		}
+
+		switch req.Action {
+		case "start":
+			if autoSyncRunning {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"status":           "already_running",
+					"message":          "Auto-sync is already running",
+					"current_interval": autoSyncInterval,
+				})
+				return
+			}
+
+			// Set interval (default to 60 seconds if not specified)
+			if req.Interval > 0 {
+				autoSyncInterval = req.Interval
+			} else {
+				autoSyncInterval = 60
+			}
+
+			// Start auto-sync
+			startAutoSync()
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":   "started",
+				"message":  "Auto-sync started successfully",
+				"interval": autoSyncInterval,
+			})
+
+		case "stop":
+			if !autoSyncRunning {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"status":  "not_running",
+					"message": "Auto-sync is not currently running",
+				})
+				return
+			}
+
+			// Stop auto-sync
+			stopAutoSync()
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":     "stopped",
+				"message":    "Auto-sync stopped successfully",
+				"sync_count": autoSyncCount,
+			})
+
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":         "Invalid action",
+				"valid_actions": []string{"start", "stop"},
+				"example":       `{"action":"start","interval":60}`,
+			})
+		}
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// NEW: Auto-sync functions
+func startAutoSync() {
+	if autoSyncRunning {
+		return
+	}
+
+	autoSyncRunning = true
+	autoSyncDone = make(chan bool)
+	autoSyncTicker = time.NewTicker(time.Duration(autoSyncInterval) * time.Second)
+
+	fmt.Printf("Auto-sync started with %d second interval\n", autoSyncInterval)
+
+	go func() {
+		for {
+			select {
+			case <-autoSyncTicker.C:
+				performAutoSync()
+			case <-autoSyncDone:
+				autoSyncTicker.Stop()
+				fmt.Println("Auto-sync stopped")
+				return
+			}
+		}
+	}()
+}
+
+func stopAutoSync() {
+	if !autoSyncRunning {
+		return
+	}
+
+	autoSyncRunning = false
+	if autoSyncDone != nil {
+		close(autoSyncDone)
+	}
+	if autoSyncTicker != nil {
+		autoSyncTicker.Stop()
+	}
+
+	fmt.Println("Auto-sync stopped")
+}
+
+func performAutoSync() {
+	fmt.Printf("Performing auto-sync #%d...\n", autoSyncCount+1)
+
+	// Perform analysis
+	analysis, err := performTicketAnalysis(syncableColumns)
+	if err != nil {
+		autoSyncLastInfo = fmt.Sprintf("Analysis failed: %v", err)
+		fmt.Printf("Auto-sync analysis failed: %v\n", err)
+		return
+	}
+
+	synced := 0
+	created := 0
+	errors := 0
+
+	// Auto-sync mismatched tickets
+	for _, ticket := range analysis.Mismatched {
+		if isIgnored(ticket.AsanaTask.GID) {
+			continue
+		}
+
+		err := updateYouTrackIssue(ticket.YouTrackIssue.ID, ticket.AsanaTask)
+		if err != nil {
+			fmt.Printf("Auto-sync error updating ticket %s: %v\n", ticket.AsanaTask.GID, err)
+			errors++
+		} else {
+			synced++
+		}
+	}
+
+	// Auto-create missing tickets
+	for _, task := range analysis.MissingYouTrack {
+		if isIgnored(task.GID) || isDuplicateTicket(task.Name) {
+			continue
+		}
+
+		err := createYouTrackIssue(task)
+		if err != nil {
+			fmt.Printf("Auto-sync error creating ticket %s: %v\n", task.GID, err)
+			errors++
+		} else {
+			created++
+		}
+	}
+
+	autoSyncCount++
+	lastSyncTime = time.Now()
+	autoSyncLastInfo = fmt.Sprintf("Synced: %d, Created: %d, Errors: %d", synced, created, errors)
+
+	fmt.Printf("Auto-sync #%d completed: %s\n", autoSyncCount, autoSyncLastInfo)
 }

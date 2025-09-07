@@ -70,24 +70,24 @@ type TicketAnalysis struct {
 }
 
 type MatchedTicket struct {
-	AsanaTask       AsanaTask     `json:"asana_task"`
-	YouTrackIssue   YouTrackIssue `json:"youtrack_issue"`
-	Status          string        `json:"status"`
+	AsanaTask     AsanaTask     `json:"asana_task"`
+	YouTrackIssue YouTrackIssue `json:"youtrack_issue"`
+	Status        string        `json:"status"`
 	// NEW: Added tag/subsystem fields for matched tickets
-	AsanaTags       []string      `json:"asana_tags"`
-	YouTrackSubsystem string      `json:"youtrack_subsystem"`
-	TagMismatch     bool          `json:"tag_mismatch"`
+	AsanaTags         []string `json:"asana_tags"`
+	YouTrackSubsystem string   `json:"youtrack_subsystem"`
+	TagMismatch       bool     `json:"tag_mismatch"`
 }
 
 type MismatchedTicket struct {
-	AsanaTask       AsanaTask     `json:"asana_task"`
-	YouTrackIssue   YouTrackIssue `json:"youtrack_issue"`
-	AsanaStatus     string        `json:"asana_status"`
-	YouTrackStatus  string        `json:"youtrack_status"`
+	AsanaTask      AsanaTask     `json:"asana_task"`
+	YouTrackIssue  YouTrackIssue `json:"youtrack_issue"`
+	AsanaStatus    string        `json:"asana_status"`
+	YouTrackStatus string        `json:"youtrack_status"`
 	// NEW: Added tag/subsystem fields for mismatched tickets
-	AsanaTags       []string      `json:"asana_tags"`
-	YouTrackSubsystem string      `json:"youtrack_subsystem"`
-	TagMismatch     bool          `json:"tag_mismatch"`
+	AsanaTags         []string `json:"asana_tags"`
+	YouTrackSubsystem string   `json:"youtrack_subsystem"`
+	TagMismatch       bool     `json:"tag_mismatch"`
 }
 
 type FindingsAlert struct {
@@ -114,9 +114,24 @@ type IgnoreRequest struct {
 	Type     string `json:"type"`
 }
 
+// NEW: Auto-sync control structures
+type AutoSyncRequest struct {
+	Action   string `json:"action"`   // "start" or "stop"
+	Interval int    `json:"interval"` // interval in seconds (optional, defaults to 60)
+}
+
+type AutoSyncStatus struct {
+	Running      bool      `json:"running"`
+	Interval     int       `json:"interval"`
+	LastSync     time.Time `json:"last_sync"`
+	NextSync     time.Time `json:"next_sync"`
+	SyncCount    int       `json:"sync_count"`
+	LastSyncInfo string    `json:"last_sync_info"`
+}
+
 // NEW: Tag mapping configuration
 type TagMapping struct {
-	AsanaTag         string `json:"asana_tag"`
+	AsanaTag          string `json:"asana_tag"`
 	YouTrackSubsystem string `json:"youtrack_subsystem"`
 }
 
@@ -126,6 +141,14 @@ var lastSyncTime time.Time
 var ignoredTicketsTemp = make(map[string]bool)
 var ignoredTicketsForever = make(map[string]bool)
 
+// NEW: Auto-sync global variables
+var autoSyncRunning = false
+var autoSyncInterval = 60 // seconds
+var autoSyncTicker *time.Ticker
+var autoSyncDone chan bool
+var autoSyncCount = 0
+var autoSyncLastInfo = ""
+
 // Column definitions
 var syncableColumns = []string{"backlog", "in progress", "dev", "stage", "blocked"}
 var displayOnlyColumns = []string{"ready for stage", "findings"}
@@ -133,19 +156,19 @@ var allColumns = append(syncableColumns, displayOnlyColumns...)
 
 // NEW: Default tag-to-subsystem mapping
 var defaultTagMapping = map[string]string{
-	"Mobile":     "mobile",
-	"Web":        "web",
-	"API":        "backend",
-	"Frontend":   "frontend",
-	"Backend":    "backend",
-	"iOS":        "mobile",
-	"Android":    "mobile",
-	"Desktop":    "desktop",
-	"Database":   "backend",
-	"UI/UX":      "frontend",
-	"DevOps":     "infrastructure",
-	"QA":         "testing",
-	"Testing":    "testing",
-	"Security":   "security",
+	"Mobile":      "mobile",
+	"Web":         "web",
+	"API":         "backend",
+	"Frontend":    "frontend",
+	"Backend":     "backend",
+	"iOS":         "mobile",
+	"Android":     "mobile",
+	"Desktop":     "desktop",
+	"Database":    "backend",
+	"UI/UX":       "frontend",
+	"DevOps":      "infrastructure",
+	"QA":          "testing",
+	"Testing":     "testing",
+	"Security":    "security",
 	"Performance": "performance",
 }

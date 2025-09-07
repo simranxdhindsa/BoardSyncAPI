@@ -43,6 +43,7 @@ func main() {
 	http.HandleFunc("/create", createMissingTicketsHandler)
 	http.HandleFunc("/sync", syncMismatchedTicketsHandler)
 	http.HandleFunc("/ignore", manageIgnoredTicketsHandler)
+	http.HandleFunc("/auto-sync", autoSyncHandler) // NEW ENDPOINT
 
 	fmt.Printf("Server starting on port %s\n", config.Port)
 	fmt.Println("Available endpoints:")
@@ -53,6 +54,7 @@ func main() {
 	fmt.Println("   POST /create-single  - Create individual ticket")
 	fmt.Println("   GET/POST /sync  - Sync mismatched tickets")
 	fmt.Println("   GET/POST /ignore - Manage ignored tickets")
+	fmt.Println("   GET/POST /auto-sync - Control auto-sync functionality") // NEW ENDPOINT
 
 	// 🚫 Disable interactive mode on Render
 	if os.Getenv("RENDER") == "" {

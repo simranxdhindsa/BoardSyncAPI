@@ -1362,3 +1362,13 @@ func saveIgnoredTickets() {
 	data, _ := json.MarshalIndent(ignored, "", "  ")
 	os.WriteFile("ignored_tickets.json", data, 0644)
 }
+
+// Add this function to the end of your services.go file
+
+// Stub function - Interactive mode disabled in favor of auto-sync
+func runInteractiveMode() {
+	// Interactive console disabled - use auto-sync API instead
+	fmt.Println("Interactive mode disabled. Use the web dashboard and auto-sync functionality.")
+	// Keep the function running to prevent main from exiting
+	select {}
+}
