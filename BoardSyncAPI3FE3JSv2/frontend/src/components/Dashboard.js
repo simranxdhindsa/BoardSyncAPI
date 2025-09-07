@@ -104,8 +104,7 @@ const Dashboard = ({ selectedColumn, onColumnSelect, onAnalyze, loading }) => {
       }
     } catch (error) {
       console.error('Failed to load auto status:', error);
-      // Show more detailed error info
-      alert(`Failed to load auto status: ${error.message}\n\nPlease check:\n1. Backend server is running\n2. CORS is properly configured\n3. /auto-create endpoint exists`);
+      // REMOVED: alert() calls - just log to console
     }
   };
 
@@ -123,7 +122,7 @@ const Dashboard = ({ selectedColumn, onColumnSelect, onAnalyze, loading }) => {
       }
     } catch (error) {
       console.error('Auto-sync toggle failed:', error);
-      alert('Auto-sync toggle failed: ' + error.message);
+      // REMOVED: alert() call - just log to console
     } finally {
       setToggleLoading(prev => ({ ...prev, sync: false }));
     }
@@ -147,7 +146,7 @@ const Dashboard = ({ selectedColumn, onColumnSelect, onAnalyze, loading }) => {
     } catch (error) {
       console.error('Auto-create toggle failed:', error);
       console.error('Error details:', error); // DEBUG
-      alert(`Auto-create toggle failed: ${error.message}\n\nDebug info:\n- Check browser console\n- Verify backend /auto-create endpoint\n- Check CORS settings`);
+      // REMOVED: alert() call - just log to console
     } finally {
       setToggleLoading(prev => ({ ...prev, create: false }));
     }
