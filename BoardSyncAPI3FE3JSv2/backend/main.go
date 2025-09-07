@@ -60,12 +60,6 @@ func main() {
 	fmt.Println("   GET/POST /auto-create - Control auto-create functionality")
 	fmt.Println("   GET  /tickets   - Get tickets by type")
 
-	// Run interactive mode only once on startup for local dev
-	if os.Getenv("RENDER") == "" {
-		fmt.Println("Starting interactive console...")
-		go runInteractiveMode()
-	}
-
 	// Start HTTP server
 	log.Fatal(http.ListenAndServe(":"+config.Port, nil))
 }
