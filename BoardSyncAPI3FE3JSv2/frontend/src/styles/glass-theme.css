@@ -41,7 +41,7 @@ body {
   width: 100vw;
   height: 100vh;
   z-index: 0;
-  backdrop-filter: blur(150px) saturate(120%);
+  backdrop-filter: blur(150px) saturate(100%);
   -webkit-backdrop-filter: blur(8px) saturate(120%);
   background: rgba(248, 250, 252, 0.1);
   pointer-events: none;
