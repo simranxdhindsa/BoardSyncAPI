@@ -31,7 +31,7 @@ func getAsanaTasks() ([]AsanaTask, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Asana API error: %d - %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("asana API error: %d - %s", resp.StatusCode, string(body))
 	}
 
 	var asanaResp AsanaResponse
@@ -925,17 +925,15 @@ func saveIgnoredTickets() {
 }
 
 // FIXED: Interactive mode runs only once - simplified console
-func runInteractiveMode() {
-	fmt.Println("=== Interactive Console Started ===")
-	fmt.Println("Console is now running. Available HTTP endpoints:")
-	fmt.Println("  GET /analyze - Run analysis")
-	fmt.Println("  GET /status - Show service status")
-	fmt.Println("  POST /auto-sync - Control auto-sync")
-	fmt.Println("  POST /auto-create - Control auto-create")
-	fmt.Println("  GET /tickets?type=... - Get ticket details")
-	fmt.Println("========================================")
+// func runInteractiveMode() {
+// 	fmt.Println("=== Interactive Console Started ===")
+// 	fmt.Println("Console is now running. Available HTTP endpoints:")
+// 	fmt.Println("  GET /analyze - Run analysis")
+// 	fmt.Println("  GET /status - Show service status")
+// 	fmt.Println("  POST /auto-sync - Control auto-sync")
+// 	fmt.Println("  POST /auto-create - Control auto-create")
+// 	fmt.Println("  GET /tickets?type=... - Get ticket details")
+// 	fmt.Println("========================================")
 
-	// FIXED: No interactive input loop - just keep the goroutine alive
-	// This prevents the hanging issue on Render.com
-	select {} // Block forever, keeping the main process alive
-}
+// 	select {}
+// }
