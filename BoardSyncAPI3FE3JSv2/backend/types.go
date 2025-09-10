@@ -110,6 +110,31 @@ type IgnoreRequest struct {
 	Type     string `json:"type"`
 }
 
+// NEW: Delete request structures
+type DeleteTicketsRequest struct {
+	TicketIDs []string `json:"ticket_ids"`
+	Source    string   `json:"source"` // "asana", "youtrack", "both"
+}
+
+type DeleteResult struct {
+	TicketID       string `json:"ticket_id"`
+	TicketName     string `json:"ticket_name"`
+	Status         string `json:"status"` // "success", "failed", "partial"
+	AsanaResult    string `json:"asana_result,omitempty"`
+	YouTrackResult string `json:"youtrack_result,omitempty"`
+	Error          string `json:"error,omitempty"`
+}
+
+type DeleteResponse struct {
+	Status         string         `json:"status"`
+	Source         string         `json:"source"`
+	RequestedCount int            `json:"requested_count"`
+	SuccessCount   int            `json:"success_count"`
+	FailureCount   int            `json:"failure_count"`
+	Results        []DeleteResult `json:"results"`
+	Summary        string         `json:"summary"`
+}
+
 // Auto-sync control structures
 type AutoSyncRequest struct {
 	Action   string `json:"action"`   // "start" or "stop"
@@ -125,7 +150,7 @@ type AutoSyncStatus struct {
 	LastSyncInfo string    `json:"last_sync_info"`
 }
 
-// NEW: Auto-create control structures
+// Auto-create control structures
 type AutoCreateRequest struct {
 	Action   string `json:"action"`   // "start" or "stop"
 	Interval int    `json:"interval"` // interval in seconds (optional, defaults to 15)
@@ -140,7 +165,7 @@ type AutoCreateStatus struct {
 	LastCreateInfo string    `json:"last_create_info"`
 }
 
-// NEW: Ticket details request
+// Ticket details request
 type TicketsRequest struct {
 	Type   string `json:"type"`   // "matched", "mismatched", "missing", "ignored", etc.
 	Column string `json:"column"` // column filter
@@ -160,13 +185,13 @@ var ignoredTicketsForever = make(map[string]bool)
 
 // Auto-sync global variables
 var autoSyncRunning = false
-var autoSyncInterval = 15 // CHANGED: default to 15 seconds
+var autoSyncInterval = 15 // default to 15 seconds
 var autoSyncTicker *time.Ticker
 var autoSyncDone chan bool
 var autoSyncCount = 0
 var autoSyncLastInfo = ""
 
-// NEW: Auto-create global variables
+// Auto-create global variables
 var autoCreateRunning = false
 var autoCreateInterval = 15 // default to 15 seconds
 var autoCreateTicker *time.Ticker

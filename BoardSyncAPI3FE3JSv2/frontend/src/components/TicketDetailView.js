@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, RefreshCw, Tag, EyeOff, Eye, Plus, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
-import { getTicketsByType, ignoreTicket, unignoreTicket } from '../services/api';
+import { ArrowLeft, RefreshCw, Tag, EyeOff, Eye, Plus, CheckCircle, Clock, AlertTriangle, Trash2, X } from 'lucide-react';
+import { getTicketsByType, ignoreTicket, unignoreTicket, deleteTickets } from '../services/api';
 
 const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
   const [tickets, setTickets] = useState([]);
@@ -8,10 +8,26 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState({});
   const [ignoredTickets, setIgnoredTickets] = useState(new Set());
+  
+  // NEW: Enhanced delete UX state
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedTickets, setSelectedTickets] = useState(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState(-1);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteSource, setDeleteSource] = useState('');
 
   useEffect(() => {
     loadTickets();
   }, [type, column]);
+
+  // Clear selection when exiting delete mode
+  useEffect(() => {
+    if (!deleteMode) {
+      setSelectedTickets(new Set());
+      setLastSelectedIndex(-1);
+    }
+  }, [deleteMode]);
 
   const loadTickets = async () => {
     setLoading(true);
@@ -19,6 +35,7 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
     try {
       const response = await getTicketsByType(type, column);
       setTickets(response.tickets || []);
+      setDeleteMode(false); // Reset delete mode on reload
     } catch (err) {
       setError(err.message);
     } finally {
@@ -32,7 +49,6 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
       await ignoreTicket(ticketId);
       setIgnoredTickets(prev => new Set([...prev, ticketId]));
       
-      // Remove from current view after a brief delay
       setTimeout(() => {
         setTickets(prev => prev.filter(ticket => 
           (ticket.gid || ticket.asana_task?.gid || ticket.id) !== ticketId
@@ -56,7 +72,6 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
         return newSet;
       });
       
-      // Remove from ignored view
       if (type === 'ignored') {
         setTickets(prev => prev.filter(id => id !== ticketId));
       }
@@ -72,7 +87,6 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
     setActionLoading(prev => ({ ...prev, [`sync_${ticketId}`]: true }));
     try {
       await onSync(ticketId);
-      // Optionally remove from mismatched view or reload
       setTimeout(loadTickets, 1000);
     } catch (err) {
       console.error('Failed to sync ticket:', err);
@@ -86,7 +100,6 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
     setActionLoading(prev => ({ ...prev, [`create_${taskId}`]: true }));
     try {
       await onCreateSingle(taskId);
-      // Optionally remove from missing view or reload
       setTimeout(loadTickets, 1000);
     } catch (err) {
       console.error('Failed to create ticket:', err);
@@ -94,6 +107,95 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
     } finally {
       setActionLoading(prev => ({ ...prev, [`create_${taskId}`]: false }));
     }
+  };
+
+  // NEW: Enhanced ticket selection with shift+click support
+  const handleTicketClick = (ticketId, index, event) => {
+    if (!deleteMode) return;
+    
+    event.preventDefault();
+    
+    if (event.shiftKey && lastSelectedIndex !== -1) {
+      // Range selection with Shift+Click
+      const startIndex = Math.min(lastSelectedIndex, index);
+      const endIndex = Math.max(lastSelectedIndex, index);
+      
+      const newSelected = new Set(selectedTickets);
+      for (let i = startIndex; i <= endIndex; i++) {
+        const ticket = tickets[i];
+        const ticketId = ticket.gid || ticket.asana_task?.gid || ticket.id || ticket;
+        newSelected.add(ticketId);
+      }
+      setSelectedTickets(newSelected);
+    } else {
+      // Single selection toggle
+      setSelectedTickets(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(ticketId)) {
+          newSet.delete(ticketId);
+        } else {
+          newSet.add(ticketId);
+        }
+        return newSet;
+      });
+      setLastSelectedIndex(index);
+    }
+  };
+
+  // NEW: Delete mode controls
+  const handleEnterDeleteMode = () => {
+    setDeleteMode(true);
+  };
+
+  const handleExitDeleteMode = () => {
+    setDeleteMode(false);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedTickets.size === tickets.length) {
+      setSelectedTickets(new Set());
+    } else {
+      const allTicketIds = tickets.map(ticket => 
+        ticket.gid || ticket.asana_task?.gid || ticket.id || ticket
+      );
+      setSelectedTickets(new Set(allTicketIds));
+    }
+  };
+
+  // Delete confirmation handlers
+  const handleDeleteClick = (source) => {
+    setDeleteSource(source);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    setDeleteLoading(true);
+    try {
+      const ticketIds = Array.from(selectedTickets);
+      const response = await deleteTickets(ticketIds, deleteSource);
+      
+      const successCount = response.success_count || 0;
+      const failureCount = response.failure_count || 0;
+      const summary = response.summary || `Processed ${ticketIds.length} tickets`;
+      
+      alert(`Delete Operation Complete:\n${summary}\n\nSuccessful: ${successCount}\nFailed: ${failureCount}`);
+      
+      setDeleteMode(false);
+      await loadTickets();
+      
+    } catch (err) {
+      console.error('Delete operation failed:', err);
+      alert('Delete operation failed: ' + err.message);
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteConfirm(false);
+      setDeleteSource('');
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setDeleteSource('');
   };
 
   const getTypeInfo = () => {
@@ -151,11 +253,21 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
     return typeConfig[type] || typeConfig.matched;
   };
 
+  const getDeleteSourceLabel = (source) => {
+    switch (source) {
+      case 'asana': return 'Asana Only';
+      case 'youtrack': return 'YouTrack Only';
+      case 'both': return 'Both Systems';
+      default: return source;
+    }
+  };
+
   const renderTicketCard = (ticket, index) => {
-    // Handle different ticket structures
     const ticketId = ticket.gid || ticket.asana_task?.gid || ticket.id || ticket;
     const ticketName = ticket.name || ticket.asana_task?.name || ticket.summary || ticketId;
     const isIgnored = ignoredTickets.has(ticketId);
+    const isSelected = selectedTickets.has(ticketId);
+    const canBeDeleted = type !== 'ignored';
     
     // Handle ignored tickets (which are just IDs)
     if (type === 'ignored' && typeof ticket === 'string') {
@@ -189,15 +301,40 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
     }
 
     return (
-      <div key={ticketId} className="glass-panel border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+      <div 
+        key={ticketId} 
+        className={`glass-panel border rounded-lg p-4 transition-all ${
+          deleteMode 
+            ? `cursor-pointer hover:shadow-md ${
+                isSelected ? 'border-red-400 bg-red-50 shadow-md' : 'border-gray-200 hover:border-red-200'
+              }`
+            : 'border-gray-200 hover:shadow-md'
+        }`}
+        onClick={(e) => canBeDeleted && handleTicketClick(ticketId, index, e)}
+      >
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1">
-            <h3 className="font-medium text-gray-900 mb-1">{ticketName}</h3>
-            <p className="text-sm text-gray-600">ID: {ticketId}</p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className={`font-medium mb-1 ${isSelected ? 'text-red-900' : 'text-gray-900'}`}>
+                  {ticketName}
+                </h3>
+                <p className={`text-sm ${isSelected ? 'text-red-700' : 'text-gray-600'}`}>
+                  ID: {ticketId}
+                </p>
+              </div>
+              
+              {/* Selection indicator */}
+              {deleteMode && canBeDeleted && isSelected && (
+                <div className="flex items-center text-red-600">
+                  <CheckCircle className="w-4 h-4" />
+                </div>
+              )}
+            </div>
             
             {/* Show section info if available */}
             {ticket.memberships?.[0]?.section?.name && (
-              <p className="text-sm text-gray-500">
+              <p className={`text-sm ${isSelected ? 'text-red-600' : 'text-gray-500'}`}>
                 Section: {ticket.memberships[0].section.name}
               </p>
             )}
@@ -219,84 +356,102 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
             )}
           </div>
           
-          {/* Action buttons */}
-          <div className="flex flex-col space-y-2 ml-4">
-            {type === 'mismatched' && (
-              <button
-                onClick={() => handleSyncTicket(ticketId)}
-                disabled={actionLoading[`sync_${ticketId}`]}
-                className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center"
-              >
-                {actionLoading[`sync_${ticketId}`] ? (
-                  <>
-                    <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                    Syncing...
-                  </>
-                ) : (
-                  'Sync'
-                )}
-              </button>
-            )}
-            
-            {type === 'missing' && (
-              <button
-                onClick={() => handleCreateTicket(ticketId)}
-                disabled={actionLoading[`create_${ticketId}`]}
-                className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center"
-              >
-                {actionLoading[`create_${ticketId}`] ? (
-                  <>
-                    <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-3 h-3 mr-1" />
-                    Create
-                  </>
-                )}
-              </button>
-            )}
-            
-            {type !== 'ignored' && (
-              <button
-                onClick={() => handleIgnoreTicket(ticketId)}
-                disabled={actionLoading[`ignore_${ticketId}`] || isIgnored}
-                className="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center"
-              >
-                {actionLoading[`ignore_${ticketId}`] ? (
-                  <>
-                    <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                    Ignoring...
-                  </>
-                ) : isIgnored ? (
-                  <>
-                    <EyeOff className="w-3 h-3 mr-1" />
-                    Ignored!
-                  </>
-                ) : (
-                  <>
-                    <EyeOff className="w-3 h-3 mr-1" />
-                    Ignore
-                  </>
-                )}
-              </button>
-            )}
-          </div>
+          {/* Action buttons - only show when not in delete mode */}
+          {!deleteMode && (
+            <div className="flex flex-col space-y-2 ml-4">
+              {type === 'mismatched' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSyncTicket(ticketId);
+                  }}
+                  disabled={actionLoading[`sync_${ticketId}`]}
+                  className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center"
+                >
+                  {actionLoading[`sync_${ticketId}`] ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                      Syncing...
+                    </>
+                  ) : (
+                    'Sync'
+                  )}
+                </button>
+              )}
+              
+              {type === 'missing' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCreateTicket(ticketId);
+                  }}
+                  disabled={actionLoading[`create_${ticketId}`]}
+                  className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center"
+                >
+                  {actionLoading[`create_${ticketId}`] ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-3 h-3 mr-1" />
+                      Create
+                    </>
+                  )}
+                </button>
+              )}
+              
+              {type !== 'ignored' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleIgnoreTicket(ticketId);
+                  }}
+                  disabled={actionLoading[`ignore_${ticketId}`] || isIgnored}
+                  className="bg-gray-100 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center"
+                >
+                  {actionLoading[`ignore_${ticketId}`] ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                      Ignoring...
+                    </>
+                  ) : isIgnored ? (
+                    <>
+                      <EyeOff className="w-3 h-3 mr-1" />
+                      Ignored!
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="w-3 h-3 mr-1" />
+                      Ignore
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
         </div>
         
         {/* Show tags if available */}
         {(ticket.tags || ticket.asana_tags) && (
           <div className="mt-3">
-            <div className="text-xs text-gray-500 mb-1">Tags:</div>
+            <div className={`text-xs mb-1 ${isSelected ? 'text-red-600' : 'text-gray-500'}`}>Tags:</div>
             <div className="flex flex-wrap gap-1">
               {(ticket.tags || ticket.asana_tags || []).map((tag, tagIndex) => (
-                <span key={tagIndex} className="tag-glass inline-flex items-center">
+                <span key={tagIndex} className={`tag-glass inline-flex items-center ${isSelected ? 'bg-red-100 text-red-800' : ''}`}>
                   <Tag className="w-3 h-3 mr-1" />
                   {typeof tag === 'string' ? tag : tag.name}
                 </span>
               ))}
             </div>
+          </div>
+        )}
+        
+        {/* Delete mode instruction */}
+        {deleteMode && canBeDeleted && index === 0 && (
+          <div className="mt-3 text-xs text-gray-500 border-t pt-2">
+            💡 Click to select tickets • Shift+Click for range selection
           </div>
         )}
       </div>
@@ -305,6 +460,7 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
 
   const typeInfo = getTypeInfo();
   const IconComponent = typeInfo.icon;
+  const canDelete = type !== 'ignored';
 
   if (loading) {
     return (
@@ -325,7 +481,8 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
           <div className="flex items-center space-x-4">
             <button 
               onClick={onBack}
-              className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+              disabled={deleteMode}
+              className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Results
@@ -334,20 +491,61 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
             <div className="flex items-center">
               <IconComponent className={`w-6 h-6 mr-2 text-${typeInfo.color}-600`} />
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">{typeInfo.title}</h1>
+                <h1 className="text-xl font-semibold text-gray-900">
+                  {typeInfo.title}
+                  {deleteMode && (
+                    <span className="text-red-600 ml-2">• Delete Mode</span>
+                  )}
+                </h1>
                 <p className="text-sm text-gray-600">{typeInfo.description}</p>
               </div>
             </div>
           </div>
           
-          <button
-            onClick={loadTickets}
-            disabled={loading}
-            className="flex items-center bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex items-center space-x-3">
+            {/* Delete mode controls */}
+            {deleteMode ? (
+              <>
+                {selectedTickets.size > 0 && (
+                  <button
+                    onClick={handleSelectAll}
+                    className="flex items-center bg-red-100 text-red-700 px-3 py-2 rounded-lg hover:bg-red-200 transition-colors text-sm"
+                  >
+                    {selectedTickets.size === tickets.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                )}
+                
+                <button
+                  onClick={handleExitDeleteMode}
+                  className="flex items-center bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                {canDelete && tickets.length > 0 && (
+                  <button
+                    onClick={handleEnterDeleteMode}
+                    className="flex items-center bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors font-medium"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </button>
+                )}
+                
+                <button
+                  onClick={loadTickets}
+                  disabled={loading}
+                  className="flex items-center bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -357,6 +555,117 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
             <div className="flex items-center">
               <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
               <p className="text-red-800">Error loading tickets: {error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Panel - Only show when in delete mode with selections */}
+        {deleteMode && selectedTickets.size > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <Trash2 className="w-5 h-5 text-red-600 mr-2" />
+                <h3 className="text-lg font-semibold text-red-900">
+                  Delete Selected ({selectedTickets.size})
+                </h3>
+              </div>
+            </div>
+            
+            <p className="text-red-700 text-sm mb-4">
+              ⚠️ Warning: This action cannot be undone. Please choose carefully where to delete the selected tickets.
+            </p>
+            
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => handleDeleteClick('asana')}
+                disabled={deleteLoading}
+                className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center font-medium"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete from Asana Only
+              </button>
+              
+              <button
+                onClick={() => handleDeleteClick('youtrack')}
+                disabled={deleteLoading}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center font-medium"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete from YouTrack Only
+              </button>
+              
+              <button
+                onClick={() => handleDeleteClick('both')}
+                disabled={deleteLoading}
+                className="bg-red-800 text-white px-4 py-2 rounded-lg hover:bg-red-900 transition-colors disabled:opacity-50 flex items-center font-medium"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete from Both Systems
+              </button>
+            </div>
+            
+            <div className="text-xs text-red-600 mt-3">
+              Selected tickets: {Array.from(selectedTickets).join(', ')}
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex items-center mb-4">
+                <AlertTriangle className="w-6 h-6 text-red-600 mr-2" />
+                <h3 className="text-lg font-semibold text-gray-900">Confirm Deletion</h3>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-gray-700 mb-3">
+                  You are about to permanently delete <strong>{selectedTickets.size}</strong> tickets from <strong>{getDeleteSourceLabel(deleteSource)}</strong>.
+                </p>
+                
+                <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-3">
+                  <p className="text-yellow-800 text-sm font-medium">
+                    ⚠️ This action cannot be undone!
+                  </p>
+                </div>
+                
+                <div className="max-h-32 overflow-y-auto bg-gray-50 rounded p-2">
+                  <p className="text-sm font-medium text-gray-700 mb-1">Tickets to be deleted:</p>
+                  <div className="text-xs text-gray-600">
+                    {Array.from(selectedTickets).map(id => (
+                      <div key={id}>• {id}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleDeleteCancel}
+                  disabled={deleteLoading}
+                  className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={deleteLoading}
+                  className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+                >
+                  {deleteLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Confirm Delete
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -380,8 +689,20 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
             <div className="mb-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 {typeInfo.title} ({tickets.length})
+                {selectedTickets.size > 0 && (
+                  <span className="text-red-600 ml-2">
+                    • {selectedTickets.size} selected
+                  </span>
+                )}
               </h2>
-              <p className="text-gray-600">{typeInfo.description}</p>
+              <p className="text-gray-600">
+                {typeInfo.description}
+                {deleteMode && (
+                  <span className="text-red-600 ml-2">
+                    • Click tickets to select • Shift+Click for range selection
+                  </span>
+                )}
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -395,4 +716,3 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
 };
 
 export default TicketDetailView;
-            

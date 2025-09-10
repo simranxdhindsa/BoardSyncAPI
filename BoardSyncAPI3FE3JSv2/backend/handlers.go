@@ -13,16 +13,17 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 		"status":    "healthy",
 		"service":   "enhanced-asana-youtrack-sync",
 		"timestamp": time.Now().Format(time.RFC3339),
-		"version":   "3.1", // Updated version
+		"version":   "3.2", // Updated version for delete functionality
 		"features": []string{
 			"Tag/Subsystem synchronization",
 			"Individual ticket creation",
 			"Enhanced status parsing",
 			"Tag mismatch detection",
 			"Auto-sync functionality",
-			"Auto-create functionality",   // NEW
-			"Ticket detail views",         // NEW
-			"Interactive console (fixed)", // NEW
+			"Auto-create functionality",
+			"Ticket detail views",
+			"Interactive console (fixed)",
+			"Bulk ticket deletion", // NEW
 		},
 		"columns": map[string]interface{}{
 			"syncable":     syncableColumns,
@@ -52,7 +53,7 @@ func statusCheck(w http.ResponseWriter, r *http.Request) {
 			"count":     autoSyncCount,
 			"last_info": autoSyncLastInfo,
 		},
-		"auto_create": map[string]interface{}{ // NEW
+		"auto_create": map[string]interface{}{
 			"running":   autoCreateRunning,
 			"interval":  autoCreateInterval,
 			"count":     autoCreateCount,
@@ -67,8 +68,9 @@ func statusCheck(w http.ResponseWriter, r *http.Request) {
 			"GET/POST /sync - Sync mismatched tickets",
 			"GET/POST /ignore - Manage ignored tickets",
 			"GET/POST /auto-sync - Control auto-sync functionality",
-			"GET/POST /auto-create - Control auto-create functionality", // NEW
-			"GET /tickets - Get tickets by type",                        // NEW
+			"GET/POST /auto-create - Control auto-create functionality",
+			"GET /tickets - Get tickets by type",
+			"POST /delete-tickets - Delete tickets (bulk)", // NEW
 		},
 	})
 }
@@ -126,7 +128,7 @@ func analyzeTicketsHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// NEW: Get tickets by type handler
+// Get tickets by type handler
 func getTicketsByTypeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
@@ -206,6 +208,89 @@ func getTicketsByTypeHandler(w http.ResponseWriter, r *http.Request) {
 		"tickets": tickets,
 		"count":   count,
 	})
+}
+
+// NEW: Delete tickets handler
+func deleteTicketsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed. Use POST.", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req DeleteTicketsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":    "Invalid JSON format",
+			"expected": "Object like: {\"ticket_ids\":[\"123\",\"456\"],\"source\":\"asana|youtrack|both\"}",
+			"example":  `{"ticket_ids":["1234567890","0987654321"],"source":"both"}`,
+		})
+		return
+	}
+
+	// Validate request
+	if len(req.TicketIDs) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":   "ticket_ids is required and must not be empty",
+			"example": `{"ticket_ids":["1234567890"],"source":"asana"}`,
+		})
+		return
+	}
+
+	if req.Source == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":         "source is required",
+			"valid_sources": []string{"asana", "youtrack", "both"},
+			"example":       `{"ticket_ids":["1234567890"],"source":"asana"}`,
+		})
+		return
+	}
+
+	// Validate source value
+	validSources := map[string]bool{"asana": true, "youtrack": true, "both": true}
+	if !validSources[req.Source] {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":         "Invalid source value",
+			"valid_sources": []string{"asana", "youtrack", "both"},
+			"received":      req.Source,
+		})
+		return
+	}
+
+	// Perform bulk delete
+	fmt.Printf("Starting bulk delete of %d tickets from %s\n", len(req.TicketIDs), req.Source)
+
+	response := performBulkDelete(req.TicketIDs, req.Source)
+
+	// Set appropriate HTTP status based on result
+	httpStatus := http.StatusOK
+	if response.Status == "failed" {
+		httpStatus = http.StatusInternalServerError
+	} else if response.Status == "partial" {
+		httpStatus = http.StatusPartialContent
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(httpStatus)
+	json.NewEncoder(w).Encode(response)
+
+	fmt.Printf("Bulk delete completed: %s\n", response.Summary)
 }
 
 func createMissingTicketsHandler(w http.ResponseWriter, r *http.Request) {
@@ -662,7 +747,7 @@ func autoSyncHandler(w http.ResponseWriter, r *http.Request) {
 			if req.Interval > 0 {
 				autoSyncInterval = req.Interval
 			} else {
-				autoSyncInterval = 15 // CHANGED: default to 15 seconds
+				autoSyncInterval = 15
 			}
 
 			startAutoSync()
@@ -708,9 +793,8 @@ func autoSyncHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// NEW: Auto-create control handler
+// Auto-create control handler
 func autoCreateHandler(w http.ResponseWriter, r *http.Request) {
-	// CORS headers - IMPORTANT for frontend to work
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -771,7 +855,7 @@ func autoCreateHandler(w http.ResponseWriter, r *http.Request) {
 			if req.Interval > 0 {
 				autoCreateInterval = req.Interval
 			} else {
-				autoCreateInterval = 15 // default to 15 seconds
+				autoCreateInterval = 15
 			}
 
 			startAutoCreate()
@@ -893,7 +977,7 @@ func performAutoSync() {
 	fmt.Printf("Auto-sync #%d completed: %s\n", autoSyncCount, autoSyncLastInfo)
 }
 
-// NEW: Auto-create functions
+// Auto-create functions
 func startAutoCreate() {
 	if autoCreateRunning {
 		return

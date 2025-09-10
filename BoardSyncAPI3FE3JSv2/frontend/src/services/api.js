@@ -53,7 +53,37 @@ export const createSingleTicket = async (taskId) => {
   return response.json();
 };
 
-// NEW: Auto-sync control
+// NEW: Delete tickets functionality
+export const deleteTickets = async (ticketIds, source) => {
+  // Validate parameters
+  if (!Array.isArray(ticketIds) || ticketIds.length === 0) {
+    throw new Error('ticketIds must be a non-empty array');
+  }
+  
+  if (!['asana', 'youtrack', 'both'].includes(source)) {
+    throw new Error('source must be one of: asana, youtrack, both');
+  }
+
+  const response = await fetch(`${API_BASE}/delete-tickets`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ticket_ids: ticketIds,
+      source: source
+    }),
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(
+      errorData?.error || `Delete failed with status: ${response.status}`
+    );
+  }
+  
+  return response.json();
+};
+
+// Auto-sync control
 export const getAutoSyncStatus = async () => {
   const response = await fetch(`${API_BASE}/auto-sync`);
   if (!response.ok) {
@@ -86,7 +116,7 @@ export const stopAutoSync = async () => {
   return response.json();
 };
 
-// NEW: Auto-create control
+// Auto-create control
 export const getAutoCreateStatus = async () => {
   const response = await fetch(`${API_BASE}/auto-create`);
   if (!response.ok) {
@@ -119,7 +149,7 @@ export const stopAutoCreate = async () => {
   return response.json();
 };
 
-// NEW: Get tickets by type (for detailed views)
+// Get tickets by type (for detailed views)
 export const getTicketsByType = async (type, column = '') => {
   const params = new URLSearchParams({ type });
   if (column) params.append('column', column);
@@ -131,7 +161,7 @@ export const getTicketsByType = async (type, column = '') => {
   return response.json();
 };
 
-// NEW: Ignore ticket management
+// Ignore ticket management
 export const ignoreTicket = async (ticketId, type = 'forever') => {
   const response = await fetch(`${API_BASE}/ignore`, {
     method: 'POST',

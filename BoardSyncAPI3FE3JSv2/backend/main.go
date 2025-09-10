@@ -46,19 +46,21 @@ func main() {
 	http.HandleFunc("/auto-sync", autoSyncHandler)
 	http.HandleFunc("/auto-create", autoCreateHandler)
 	http.HandleFunc("/tickets", getTicketsByTypeHandler)
+	http.HandleFunc("/delete-tickets", deleteTicketsHandler) // NEW: Delete functionality
 
-	// fmt.Printf("Server starting on port %s\n", config.Port)
-	// fmt.Println("Available endpoints:")
-	// fmt.Println("   GET  /health    - Health check")
-	// fmt.Println("   GET  /status    - Service status")
-	// fmt.Println("   GET  /analyze   - Analyze ticket differences")
-	// fmt.Println("   POST /create    - Create missing tickets")
-	// fmt.Println("   POST /create-single  - Create individual ticket")
-	// fmt.Println("   GET/POST /sync  - Sync mismatched tickets")
-	// fmt.Println("   GET/POST /ignore - Manage ignored tickets")
-	// fmt.Println("   GET/POST /auto-sync - Control auto-sync functionality")
-	// fmt.Println("   GET/POST /auto-create - Control auto-create functionality")
-	// fmt.Println("   GET  /tickets   - Get tickets by type")
+	fmt.Printf("Server starting on port %s\n", config.Port)
+	fmt.Println("Available endpoints:")
+	fmt.Println("   GET  /health         - Health check")
+	fmt.Println("   GET  /status         - Service status")
+	fmt.Println("   GET  /analyze        - Analyze ticket differences")
+	fmt.Println("   POST /create         - Create missing tickets")
+	fmt.Println("   POST /create-single  - Create individual ticket")
+	fmt.Println("   GET/POST /sync       - Sync mismatched tickets")
+	fmt.Println("   GET/POST /ignore     - Manage ignored tickets")
+	fmt.Println("   GET/POST /auto-sync  - Control auto-sync functionality")
+	fmt.Println("   GET/POST /auto-create- Control auto-create functionality")
+	fmt.Println("   GET  /tickets        - Get tickets by type")
+	fmt.Println("   POST /delete-tickets - Delete tickets (bulk)") // NEW
 
 	// Start HTTP server
 	log.Fatal(http.ListenAndServe(":"+config.Port, nil))

@@ -42,6 +42,34 @@ func getAsanaTasks() ([]AsanaTask, error) {
 	return asanaResp.Data, nil
 }
 
+// NEW: Delete Asana Task
+func deleteAsanaTask(taskID string) error {
+	url := fmt.Sprintf("https://app.asana.com/api/1.0/tasks/%s", taskID)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %v", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+config.AsanaPAT)
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("network error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("asana delete error: %d - %s", resp.StatusCode, string(body))
+	}
+
+	fmt.Printf("Successfully deleted Asana task: %s\n", taskID)
+	return nil
+}
+
 // ENHANCED: YouTrack API Functions with Subsystem Support
 func getYouTrackIssues() ([]YouTrackIssue, error) {
 	fmt.Printf("Connecting to YouTrack Cloud: %s\n", config.YouTrackBaseURL)
@@ -64,6 +92,215 @@ func getYouTrackIssues() ([]YouTrackIssue, error) {
 	}
 
 	return nil, fmt.Errorf("all approaches failed to connect to YouTrack Cloud")
+}
+
+// NEW: Delete YouTrack Issue
+func deleteYouTrackIssue(issueID string) error {
+	url := fmt.Sprintf("%s/api/issues/%s", config.YouTrackBaseURL, issueID)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %v", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+config.YouTrackToken)
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("network error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("youTrack delete error: %d - %s", resp.StatusCode, string(body))
+	}
+
+	fmt.Printf("Successfully deleted YouTrack issue: %s\n", issueID)
+	return nil
+}
+
+// NEW: Get ticket name for a given ID (for delete operations)
+func getTicketName(ticketID string) string {
+	// Try to get from current analysis or cache
+	allTasks, err := getAsanaTasks()
+	if err == nil {
+		for _, task := range allTasks {
+			if task.GID == ticketID {
+				return task.Name
+			}
+		}
+	}
+
+	youTrackIssues, err := getYouTrackIssues()
+	if err == nil {
+		for _, issue := range youTrackIssues {
+			asanaID := extractAsanaID(issue)
+			if asanaID == ticketID {
+				return issue.Summary
+			}
+			if issue.ID == ticketID {
+				return issue.Summary
+			}
+		}
+	}
+
+	return fmt.Sprintf("Ticket-%s", ticketID) // Fallback name
+}
+
+// NEW: Find YouTrack issue ID by Asana task ID
+func findYouTrackIssueByAsanaID(asanaTaskID string) (string, error) {
+	youTrackIssues, err := getYouTrackIssues()
+	if err != nil {
+		return "", fmt.Errorf("failed to get YouTrack issues: %v", err)
+	}
+
+	for _, issue := range youTrackIssues {
+		asanaID := extractAsanaID(issue)
+		if asanaID == asanaTaskID {
+			return issue.ID, nil
+		}
+	}
+
+	return "", fmt.Errorf("no YouTrack issue found for Asana task %s", asanaTaskID)
+}
+
+// NEW: Bulk delete tickets
+func performBulkDelete(ticketIDs []string, source string) DeleteResponse {
+	response := DeleteResponse{
+		Source:         source,
+		RequestedCount: len(ticketIDs),
+		Results:        make([]DeleteResult, 0, len(ticketIDs)),
+	}
+
+	for _, ticketID := range ticketIDs {
+		result := DeleteResult{
+			TicketID:   ticketID,
+			TicketName: getTicketName(ticketID),
+		}
+
+		switch source {
+		case "asana":
+			err := deleteAsanaTask(ticketID)
+			if err != nil {
+				result.Status = "failed"
+				result.AsanaResult = "failed"
+				result.Error = err.Error()
+				response.FailureCount++
+			} else {
+				result.Status = "success"
+				result.AsanaResult = "deleted"
+				response.SuccessCount++
+			}
+
+		case "youtrack":
+			// For YouTrack deletion, we need to check if ticketID is Asana ID or YouTrack ID
+			var youtrackIssueID string
+			var err error
+
+			// First try to use as direct YouTrack issue ID
+			youtrackIssueID = ticketID
+			err = deleteYouTrackIssue(youtrackIssueID)
+
+			// If that fails, try to find YouTrack issue by Asana ID
+			if err != nil {
+				youtrackIssueID, findErr := findYouTrackIssueByAsanaID(ticketID)
+				if findErr != nil {
+					result.Status = "failed"
+					result.YouTrackResult = "failed"
+					result.Error = fmt.Sprintf("Issue not found: %v", findErr)
+					response.FailureCount++
+				} else {
+					err = deleteYouTrackIssue(youtrackIssueID)
+					if err != nil {
+						result.Status = "failed"
+						result.YouTrackResult = "failed"
+						result.Error = err.Error()
+						response.FailureCount++
+					} else {
+						result.Status = "success"
+						result.YouTrackResult = "deleted"
+						response.SuccessCount++
+					}
+				}
+			} else {
+				result.Status = "success"
+				result.YouTrackResult = "deleted"
+				response.SuccessCount++
+			}
+
+		case "both":
+			asanaSuccess := true
+			youtrackSuccess := true
+			var errors []string
+
+			// Delete from Asana
+			err := deleteAsanaTask(ticketID)
+			if err != nil {
+				asanaSuccess = false
+				result.AsanaResult = "failed"
+				errors = append(errors, fmt.Sprintf("Asana: %v", err))
+			} else {
+				result.AsanaResult = "deleted"
+			}
+
+			// Delete from YouTrack
+			youtrackIssueID, findErr := findYouTrackIssueByAsanaID(ticketID)
+			if findErr != nil {
+				youtrackSuccess = false
+				result.YouTrackResult = "not_found"
+				errors = append(errors, fmt.Sprintf("YouTrack: %v", findErr))
+			} else {
+				err = deleteYouTrackIssue(youtrackIssueID)
+				if err != nil {
+					youtrackSuccess = false
+					result.YouTrackResult = "failed"
+					errors = append(errors, fmt.Sprintf("YouTrack: %v", err))
+				} else {
+					result.YouTrackResult = "deleted"
+				}
+			}
+
+			// Determine overall status
+			if asanaSuccess && youtrackSuccess {
+				result.Status = "success"
+				response.SuccessCount++
+			} else if asanaSuccess || youtrackSuccess {
+				result.Status = "partial"
+				response.SuccessCount++
+			} else {
+				result.Status = "failed"
+				response.FailureCount++
+			}
+
+			if len(errors) > 0 {
+				result.Error = strings.Join(errors, "; ")
+			}
+
+		default:
+			result.Status = "failed"
+			result.Error = "Invalid source specified"
+			response.FailureCount++
+		}
+
+		response.Results = append(response.Results, result)
+	}
+
+	// Set overall status
+	if response.SuccessCount == response.RequestedCount {
+		response.Status = "success"
+		response.Summary = fmt.Sprintf("Successfully deleted all %d tickets from %s", response.SuccessCount, source)
+	} else if response.SuccessCount > 0 {
+		response.Status = "partial"
+		response.Summary = fmt.Sprintf("Deleted %d of %d tickets from %s (%d failed)", response.SuccessCount, response.RequestedCount, source, response.FailureCount)
+	} else {
+		response.Status = "failed"
+		response.Summary = fmt.Sprintf("Failed to delete any tickets from %s", source)
+	}
+
+	return response
 }
 
 func getYouTrackIssuesWithQuery() ([]YouTrackIssue, error) {
@@ -447,149 +684,9 @@ func createYouTrackIssue(task AsanaTask) error {
 		return fmt.Errorf("YouTrack create error: %d - %s", resp.StatusCode, string(body))
 	}
 
-	return nil
-}
-
-// Rest of the functions would continue here...
-// Let me split this into parts to avoid hitting length limits
-
-func updateYouTrackIssue(issueID string, task AsanaTask) error {
-	state := mapAsanaStateToYouTrack(task)
-
-	if state == "FINDINGS_NO_SYNC" || state == "READY_FOR_STAGE_NO_SYNC" {
-		return fmt.Errorf("cannot update ticket for display-only column")
-	}
-
-	payload := map[string]interface{}{
-		"$type":       "Issue",
-		"summary":     task.Name,
-		"description": fmt.Sprintf("%s\n\n[Synced from Asana ID: %s]", task.Notes, task.GID),
-	}
-
-	customFields := []map[string]interface{}{}
-
-	if state != "" {
-		customFields = append(customFields, map[string]interface{}{
-			"$type": "StateIssueCustomField",
-			"name":  "State",
-			"value": map[string]interface{}{
-				"$type": "StateBundleElement",
-				"name":  state,
-			},
-		})
-	}
-
-	asanaTags := getAsanaTags(task)
+	// FIXED: Only log tags if we have them
 	if len(asanaTags) > 0 {
-		primaryTag := asanaTags[0]
-		subsystem := mapTagToSubsystem(primaryTag)
-		if subsystem != "" {
-			customFields = append(customFields, map[string]interface{}{
-				"$type": "MultiOwnedIssueCustomField",
-				"name":  "Subsystem",
-				"value": []map[string]interface{}{
-					{
-						"$type": "OwnedBundleElement",
-						"name":  subsystem,
-					},
-				},
-			})
-		}
-	}
-
-	if len(customFields) > 0 {
-		payload["customFields"] = customFields
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	url := fmt.Sprintf("%s/api/issues/%s", config.YouTrackBaseURL, issueID)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+config.YouTrackToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		bodyStr := string(body)
-		if strings.Contains(bodyStr, "incompatible-issue-custom-field-name-Subsystem") {
-			return updateYouTrackIssueWithoutSubsystem(issueID, task)
-		}
-		return fmt.Errorf("YouTrack update error: %d - %s", resp.StatusCode, bodyStr)
-	}
-
-	if len(asanaTags) > 0 {
-		fmt.Printf("Successfully updated ticket %s with tags: %v\n", issueID, asanaTags)
-	}
-
-	return nil
-}
-
-func updateYouTrackIssueWithoutSubsystem(issueID string, task AsanaTask) error {
-	state := mapAsanaStateToYouTrack(task)
-
-	payload := map[string]interface{}{
-		"$type":       "Issue",
-		"summary":     task.Name,
-		"description": fmt.Sprintf("%s\n\n[Synced from Asana ID: %s]", task.Notes, task.GID),
-	}
-
-	if state != "" {
-		payload["customFields"] = []map[string]interface{}{
-			{
-				"$type": "StateIssueCustomField",
-				"name":  "State",
-				"value": map[string]interface{}{
-					"$type": "StateBundleElement",
-					"name":  state,
-				},
-			},
-		}
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	url := fmt.Sprintf("%s/api/issues/%s", config.YouTrackBaseURL, issueID)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+config.YouTrackToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("YouTrack update error: %d - %s", resp.StatusCode, string(body))
-	}
-
-	asanaTags := getAsanaTags(task)
-	if len(asanaTags) > 0 {
-		fmt.Printf("Updated ticket %s (status only - Subsystem field not available). Tags: %v\n", issueID, asanaTags)
+		fmt.Printf("Created ticket with tags: %v\n", asanaTags)
 	}
 
 	return nil
@@ -758,6 +855,150 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 	return analysis, nil
 }
 
+// FIXED: Complete updateYouTrackIssue function
+func updateYouTrackIssue(issueID string, task AsanaTask) error {
+	state := mapAsanaStateToYouTrack(task)
+
+	if state == "FINDINGS_NO_SYNC" || state == "READY_FOR_STAGE_NO_SYNC" {
+		return fmt.Errorf("cannot update ticket for display-only column")
+	}
+
+	payload := map[string]interface{}{
+		"$type":       "Issue",
+		"summary":     task.Name,
+		"description": fmt.Sprintf("%s\n\n[Synced from Asana ID: %s]", task.Notes, task.GID),
+	}
+
+	customFields := []map[string]interface{}{}
+
+	if state != "" {
+		customFields = append(customFields, map[string]interface{}{
+			"$type": "StateIssueCustomField",
+			"name":  "State",
+			"value": map[string]interface{}{
+				"$type": "StateBundleElement",
+				"name":  state,
+			},
+		})
+	}
+
+	asanaTags := getAsanaTags(task)
+	if len(asanaTags) > 0 {
+		primaryTag := asanaTags[0]
+		subsystem := mapTagToSubsystem(primaryTag)
+		if subsystem != "" {
+			customFields = append(customFields, map[string]interface{}{
+				"$type": "MultiOwnedIssueCustomField",
+				"name":  "Subsystem",
+				"value": []map[string]interface{}{
+					{
+						"$type": "OwnedBundleElement",
+						"name":  subsystem,
+					},
+				},
+			})
+		}
+	}
+
+	if len(customFields) > 0 {
+		payload["customFields"] = customFields
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("%s/api/issues/%s", config.YouTrackBaseURL, issueID)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+config.YouTrackToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		bodyStr := string(body)
+		if strings.Contains(bodyStr, "incompatible-issue-custom-field-name-Subsystem") {
+			return updateYouTrackIssueWithoutSubsystem(issueID, task)
+		}
+		return fmt.Errorf("YouTrack update error: %d - %s", resp.StatusCode, bodyStr)
+	}
+
+	if len(asanaTags) > 0 {
+		fmt.Printf("Successfully updated ticket %s with tags: %v\n", issueID, asanaTags)
+	}
+
+	return nil
+}
+
+func updateYouTrackIssueWithoutSubsystem(issueID string, task AsanaTask) error {
+	state := mapAsanaStateToYouTrack(task)
+
+	payload := map[string]interface{}{
+		"$type":       "Issue",
+		"summary":     task.Name,
+		"description": fmt.Sprintf("%s\n\n[Synced from Asana ID: %s]", task.Notes, task.GID),
+	}
+
+	if state != "" {
+		payload["customFields"] = []map[string]interface{}{
+			{
+				"$type": "StateIssueCustomField",
+				"name":  "State",
+				"value": map[string]interface{}{
+					"$type": "StateBundleElement",
+					"name":  state,
+				},
+			},
+		}
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("%s/api/issues/%s", config.YouTrackBaseURL, issueID)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+config.YouTrackToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("YouTrack update error: %d - %s", resp.StatusCode, string(body))
+	}
+
+	asanaTags := getAsanaTags(task)
+	if len(asanaTags) > 0 {
+		fmt.Printf("Updated ticket %s (status only - Subsystem field not available). Tags: %v\n", issueID, asanaTags)
+	}
+
+	return nil
+}
+
 // Helper Functions
 func getAsanaTags(task AsanaTask) []string {
 	var tags []string
@@ -924,16 +1165,4 @@ func saveIgnoredTickets() {
 	os.WriteFile("ignored_tickets.json", data, 0644)
 }
 
-// FIXED: Interactive mode runs only once - simplified console
-// func runInteractiveMode() {
-// 	fmt.Println("=== Interactive Console Started ===")
-// 	fmt.Println("Console is now running. Available HTTP endpoints:")
-// 	fmt.Println("  GET /analyze - Run analysis")
-// 	fmt.Println("  GET /status - Show service status")
-// 	fmt.Println("  POST /auto-sync - Control auto-sync")
-// 	fmt.Println("  POST /auto-create - Control auto-create")
-// 	fmt.Println("  GET /tickets?type=... - Get ticket details")
-// 	fmt.Println("========================================")
-
-// 	select {}
-// }
+// simran
