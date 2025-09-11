@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Dashboard from './components/Dashboard';
 import AnalysisResults from './components/AnalysisResults';
-import ThreeBackground from './components/ThreeBackground';
+import LuxuryBackground from './components/LuxuryBackground'; // Updated import
 import { analyzeTickets, syncSingleTicket, createSingleTicket, createMissingTickets } from './services/api';
 import './styles/glass-theme.css';
 
@@ -86,9 +86,9 @@ function App() {
 
   return (
     <div className="App" style={{ position: 'relative', minHeight: '100vh' }}>
-      {/* 3D Background Layer - Behind blur separator */}
-      <div className="three-background-container">
-        <ThreeBackground 
+      {/* Luxury Interactive Background - Updated component */}
+      <div className="luxury-background-container">
+        <LuxuryBackground 
           currentView={currentView}
           analysisData={analysisData}
           selectedColumn={selectedColumn}
@@ -96,11 +96,11 @@ function App() {
         />
       </div>
       
-      {/* Blur Separator Layer - Creates depth separation between 3D and UI */}
-      <div className="blur-separator" />
+      {/* Blur Separator Layer - Creates depth separation between background and UI */}
+      <div className="luxury-canvas-blur-separator" />
       
       {/* Main Application Content - Glass themed dashboard with enhanced layering */}
-      <div className="main-content-layer">
+      <div className="luxury-canvas-content-layer">
         {currentView === 'dashboard' ? (
           <Dashboard
             selectedColumn={selectedColumn}
@@ -122,7 +122,7 @@ function App() {
       
       {/* Funny Credit Footer */}
       <div className="credit-footer">
-        Made with Frustration By Simran • Powered by Three.js
+        Made with Frustration By Simran • Powered by Canvas 2D
       </div>
     </div>
   );
