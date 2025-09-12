@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, RefreshCw, Tag, EyeOff, Eye, Plus, CheckCircle, Clock, AlertTriangle, Trash2, X } from 'lucide-react';
 import { getTicketsByType, ignoreTicket, unignoreTicket, deleteTickets } from '../services/api';
 
-const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, setNavBarSlots }) => {
+const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCreateMissing, setNavBarSlots }) => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,6 +16,9 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, setNav
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteSource, setDeleteSource] = useState('');
+
+  // NEW: Create all loading state
+  const [createAllLoading, setCreateAllLoading] = useState(false);
 
   useEffect(() => {
     loadTickets();
@@ -72,6 +75,26 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, setNav
           </>
         ) : (
           <>
+            {/* NEW: Create All Button for missing tickets */}
+            {type === 'missing' && tickets.length > 0 && onCreateMissing && (
+              <button
+                onClick={handleCreateAll}
+                disabled={createAllLoading}
+                className="flex items-center bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 font-medium"
+              >
+                {createAllLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Creating All...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create All
+                  </>
+                )}
+              </button>
+            )}
             {type !== 'ignored' && tickets.length > 0 && (
               <button
                 onClick={handleEnterDeleteMode}
@@ -103,7 +126,7 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, setNav
         setNavBarSlots(null, null);
       }
     };
-  }, [type, column, deleteMode, selectedTickets, tickets.length, loading]);
+  }, [type, column, deleteMode, selectedTickets, tickets.length, loading, createAllLoading]);
 
   // Clear selection when exiting delete mode
   useEffect(() => {
@@ -124,6 +147,22 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, setNav
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // NEW: Handle create all missing tickets
+  const handleCreateAll = async () => {
+    if (!onCreateMissing || tickets.length === 0) return;
+    
+    setCreateAllLoading(true);
+    try {
+      await onCreateMissing();
+      setTimeout(loadTickets, 1000); // Refresh after creation
+    } catch (err) {
+      console.error('Failed to create all tickets:', err);
+      alert('Failed to create all tickets: ' + err.message);
+    } finally {
+      setCreateAllLoading(false);
     }
   };
 

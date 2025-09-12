@@ -48,6 +48,7 @@ const AnalysisResults = ({
         onBack={handleBackFromDetail}
         onSync={onSync}
         onCreateSingle={onCreateSingle}
+        onCreateMissing={onCreateMissing}
         setNavBarSlots={setNavBarSlots}
       />
     );
@@ -285,7 +286,7 @@ const AnalysisResults = ({
               <div className="flex space-x-2">
                 <button 
                   onClick={() => handleSummaryCardClick('mismatched')}
-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
+                  className="glass-panel interactive-element bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
                 >
                   <Eye className="w-4 h-4 mr-2" />
                   View All
@@ -388,9 +389,11 @@ const AnalysisResults = ({
                 <div className="mt-4 text-center">
                   <button 
                     onClick={() => handleSummaryCardClick('mismatched')}
-                    className="text-blue-600 hover:text-blue-800 font-medium"
+                    className="glass-panel interactive-element bg-blue-50 border border-blue-200 text-blue-700 px-6 py-3 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all font-medium inline-flex items-center"
                   >
-                    View all {analysis.mismatched.length} mismatched tickets →
+                    <Eye className="w-4 h-4 mr-2" />
+                    View all {analysis.mismatched.length} mismatched tickets
+                    <ArrowLeft className="w-4 h-4 ml-2 rotate-180" />
                   </button>
                 </div>
               )}
@@ -408,7 +411,7 @@ const AnalysisResults = ({
               <div className="flex space-x-2">
                 <button 
                   onClick={() => handleSummaryCardClick('missing')}
-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
+                  className="glass-panel interactive-element bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
                 >
                   <Eye className="w-4 h-4 mr-2" />
                   View All
@@ -484,9 +487,11 @@ const AnalysisResults = ({
               <div className="mt-4 text-center">
                 <button 
                   onClick={() => handleSummaryCardClick('missing')}
-                  className="text-blue-600 hover:text-blue-800 font-medium"
+                  className="glass-panel interactive-element bg-blue-50 border border-blue-200 text-blue-700 px-6 py-3 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all font-medium inline-flex items-center"
                 >
-                  View all {analysis.missing_youtrack.length} missing tickets →
+                  <Eye className="w-4 h-4 mr-2" />
+                  View all {analysis.missing_youtrack.length} missing tickets
+                  <ArrowLeft className="w-4 h-4 ml-2 rotate-180" />
                 </button>
               </div>
             )}
@@ -517,9 +522,11 @@ const AnalysisResults = ({
                     {analysis.ready_for_stage && analysis.ready_for_stage.length > 3 && (
                       <button 
                         onClick={() => handleSummaryCardClick('ready_for_stage')}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        className="glass-panel interactive-element bg-green-50 border border-green-200 text-green-700 px-4 py-2 rounded-lg hover:bg-green-100 hover:border-green-300 transition-all text-sm font-medium inline-flex items-center"
                       >
-                        View all {analysis.ready_for_stage.length} tickets →
+                        <Eye className="w-3 h-3 mr-2" />
+                        View all {analysis.ready_for_stage.length} tickets
+                        <ArrowLeft className="w-3 h-3 ml-2 rotate-180" />
                       </button>
                     )}
                   </div>
@@ -544,9 +551,11 @@ const AnalysisResults = ({
                     {analysis.findings_tickets && analysis.findings_tickets.length > 3 && (
                       <button 
                         onClick={() => handleSummaryCardClick('findings')}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        className="glass-panel interactive-element bg-orange-50 border border-orange-200 text-orange-700 px-4 py-2 rounded-lg hover:bg-orange-100 hover:border-orange-300 transition-all text-sm font-medium inline-flex items-center"
                       >
-                        View all {analysis.findings_tickets.length} tickets →
+                        <Eye className="w-3 h-3 mr-2" />
+                        View all {analysis.findings_tickets.length} tickets
+                        <ArrowLeft className="w-3 h-3 ml-2 rotate-180" />
                       </button>
                     )}
                   </div>

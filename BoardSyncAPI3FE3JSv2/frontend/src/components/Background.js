@@ -1,6 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading }) => {
+const LuxuryBackground = ({ 
+  currentView, 
+  analysisData, 
+  selectedColumn, 
+  isLoading,
+  // NEW: Status indicators
+  autoSyncRunning = false,
+  autoCreateRunning = false 
+}) => {
   const canvasRef = useRef(null);
   const animationIdRef = useRef(null);
   const mouseRef = useRef({ x: 0, y: 0 });
@@ -12,24 +20,28 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
   const [mouseZoom, setMouseZoom] = useState({ x: 0, y: 0, active: false });
   const animationTimeRef = useRef(0);
 
-  // Enhanced configuration with more dots and continuous movement
+  // Enhanced configuration with status indicator support
   const config = {
-    dotCount: 65, // Increased back to 65 for more visual richness
+    dotCount: 65,
     maxConnections: 2,
-    connectionDistance: 200, // Adjusted for new dot count
+    connectionDistance: 200,
     cursorConnectionDistance: 180,
     dotSize: 2.2,
     lineWidth: 1.8,
     glowIntensity: 0.8,
     fadeSpeed: 0.04,
     transitionDuration: 400,
-    zoomIntensity: 0.12, // Increased zoom effect
-    zoomRadius: 200, // Larger zoom radius
-    // New animation properties
-    floatSpeed: 0.0008, // Speed of floating animation
-    floatAmplitude: 25, // How far dots move from their base position
-    waveSpeed: 0.0015, // Speed of wave-like movement
-    breathingSpeed: 0.001 // Gentle breathing effect
+    zoomIntensity: 0.12,
+    zoomRadius: 200,
+    // Animation properties
+    floatSpeed: 0.0008,
+    floatAmplitude: 25,
+    waveSpeed: 0.0015,
+    breathingSpeed: 0.001,
+    // NEW: Status indicator properties
+    statusPulseSpeed: 0.002,
+    statusGlowIntensity: 1.2,
+    statusSizeMultiplier: 1.3
   };
 
   // Simple distance calculation utility
@@ -39,10 +51,10 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
     return Math.sqrt(dx * dx + dy * dy);
   };
 
-  // Enhanced Dot class with continuous movement
+  // Enhanced Dot class with status indicator support
   class Dot {
     constructor(x, y, index) {
-      this.baseX = x; // Original position
+      this.baseX = x;
       this.baseY = y;
       this.x = x;
       this.y = y;
@@ -58,17 +70,62 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
       this.lastConnectionTime = 0;
       
       // Animation properties
-      this.floatOffsetX = Math.random() * Math.PI * 2; // Random phase for X movement
-      this.floatOffsetY = Math.random() * Math.PI * 2; // Random phase for Y movement
-      this.floatSpeedMultiplier = 0.8 + Math.random() * 0.4; // Vary speed per dot
+      this.floatOffsetX = Math.random() * Math.PI * 2;
+      this.floatOffsetY = Math.random() * Math.PI * 2;
+      this.floatSpeedMultiplier = 0.8 + Math.random() * 0.4;
       this.index = index;
       
       // Size breathing effect
       this.breathingOffset = Math.random() * Math.PI * 2;
       this.baseSize = this.size;
+      
+      // NEW: Status indicator properties
+      this.zone = null;
+      this.isStatusDot = false;
+      this.statusType = null;
+      this.statusPulseOffset = Math.random() * Math.PI * 2;
+      this.statusTransition = 0; // 0 to 1 for smooth transitions
     }
 
-    update(time) {
+    // NEW: Determine zone and update status
+    updateZone(canvasWidth) {
+      this.zone = this.baseX < canvasWidth / 2 ? 'left' : 'right';
+      
+      // Check if this dot should be a status indicator
+      const wasStatusDot = this.isStatusDot;
+      const oldStatusType = this.statusType;
+      
+      if (this.zone === 'left' && autoSyncRunning) {
+        this.isStatusDot = true;
+        this.statusType = 'sync';
+      } else if (this.zone === 'right' && autoCreateRunning) {
+        this.isStatusDot = true;
+        this.statusType = 'create';
+      } else {
+        this.isStatusDot = false;
+        this.statusType = null;
+      }
+      
+      // Smooth transition for status change
+      if (this.isStatusDot && (!wasStatusDot || oldStatusType !== this.statusType)) {
+        // Becoming a status dot or changing type
+        this.statusTransition = Math.min(1, this.statusTransition + 0.05);
+      } else if (!this.isStatusDot && wasStatusDot) {
+        // No longer a status dot
+        this.statusTransition = Math.max(0, this.statusTransition - 0.03);
+      } else if (this.isStatusDot) {
+        // Maintain status dot state
+        this.statusTransition = Math.min(1, this.statusTransition + 0.02);
+      } else {
+        // Normal dot
+        this.statusTransition = Math.max(0, this.statusTransition - 0.02);
+      }
+    }
+
+    update(time, canvasWidth) {
+      // Update zone and status
+      this.updateZone(canvasWidth);
+      
       // Continuous floating animation
       const floatX = Math.sin(time * config.floatSpeed * this.floatSpeedMultiplier + this.floatOffsetX) * config.floatAmplitude;
       const floatY = Math.cos(time * config.floatSpeed * this.floatSpeedMultiplier + this.floatOffsetY) * config.floatAmplitude * 0.7;
@@ -77,9 +134,17 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
       const waveX = Math.sin(time * config.waveSpeed + this.index * 0.1) * 15;
       const waveY = Math.cos(time * config.waveSpeed * 0.7 + this.index * 0.15) * 10;
       
-      // Update target position with floating animation
-      this.targetX = this.baseX + floatX + waveX;
-      this.targetY = this.baseY + floatY + waveY;
+      // NEW: Enhanced movement for status dots
+      let statusFloatX = 0, statusFloatY = 0;
+      if (this.isStatusDot && this.statusTransition > 0) {
+        const statusPulse = Math.sin(time * config.statusPulseSpeed + this.statusPulseOffset);
+        statusFloatX = statusPulse * 5 * this.statusTransition;
+        statusFloatY = Math.cos(time * config.statusPulseSpeed * 0.7 + this.statusPulseOffset) * 3 * this.statusTransition;
+      }
+      
+      // Update target position with all animations
+      this.targetX = this.baseX + floatX + waveX + statusFloatX;
+      this.targetY = this.baseY + floatY + waveY + statusFloatY;
 
       // Smooth movement to animated target position
       const dx = this.targetX - this.x;
@@ -91,22 +156,35 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
       this.x += this.vx;
       this.y += this.vy;
 
-      // Breathing size effect
+      // Enhanced size calculation with status effects
       const breathingScale = 1 + Math.sin(time * config.breathingSpeed + this.breathingOffset) * 0.2;
-      this.size = this.baseSize * breathingScale;
+      let statusSizeBoost = 1;
+      
+      if (this.isStatusDot && this.statusTransition > 0) {
+        const statusPulse = Math.sin(time * config.statusPulseSpeed * 2 + this.statusPulseOffset);
+        statusSizeBoost = 1 + (statusPulse * 0.3 + 0.3) * this.statusTransition * config.statusSizeMultiplier;
+      }
+      
+      this.size = this.baseSize * breathingScale * statusSizeBoost;
 
-      // Faster glow fade
+      // Enhanced glow with status effects
       this.glowIntensity *= 0.92;
       
-      // Update opacity based on connections
+      if (this.isStatusDot && this.statusTransition > 0) {
+        const statusGlow = Math.sin(time * config.statusPulseSpeed * 1.5 + this.statusPulseOffset) * 0.5 + 0.5;
+        this.glowIntensity = Math.max(this.glowIntensity, statusGlow * config.statusGlowIntensity * this.statusTransition);
+      }
+      
+      // Update opacity based on connections and status
       if (this.connections.length > 0) {
         this.opacity = Math.min(1, this.baseOpacity + 0.5);
+      } else if (this.isStatusDot && this.statusTransition > 0) {
+        this.opacity = Math.min(1, this.baseOpacity + 0.3 * this.statusTransition);
       } else {
         this.opacity = this.baseOpacity;
       }
     }
 
-    // Method to update base position (for page transitions)
     updateBasePosition(newX, newY) {
       this.baseX = newX;
       this.baseY = newY;
@@ -121,15 +199,44 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
       const alpha = this.opacity;
       const glowAlpha = Math.min(0.9, this.glowIntensity);
       
-      // Darker color scheme
-      gradient.addColorStop(0, `rgba(71, 85, 105, ${alpha})`);
-      gradient.addColorStop(0.5, `rgba(100, 116, 139, ${alpha * 0.7})`);
-      gradient.addColorStop(1, `rgba(148, 163, 184, 0)`);
-
-      // Enhanced glow effect with darker blue
-      if (this.glowIntensity > 0.1) {
-        ctx.shadowColor = `rgba(30, 64, 175, ${glowAlpha})`;
-        ctx.shadowBlur = 18;
+      // NEW: Status-aware colors
+      if (this.isStatusDot && this.statusTransition > 0) {
+        const normalAlpha = alpha * (1 - this.statusTransition);
+        const statusAlpha = alpha * this.statusTransition;
+        
+        if (this.statusType === 'sync') {
+          // Auto-sync colors (green/blue theme)
+          gradient.addColorStop(0, `rgba(16, 185, 129, ${statusAlpha * 0.9})`);
+          gradient.addColorStop(0.3, `rgba(34, 197, 94, ${statusAlpha * 0.7})`);
+          gradient.addColorStop(0.7, `rgba(59, 130, 246, ${statusAlpha * 0.5})`);
+          gradient.addColorStop(1, `rgba(148, 163, 184, ${normalAlpha * 0.3})`);
+        } else if (this.statusType === 'create') {
+          // Auto-create colors (blue/purple theme)
+          gradient.addColorStop(0, `rgba(59, 130, 246, ${statusAlpha * 0.9})`);
+          gradient.addColorStop(0.3, `rgba(99, 102, 241, ${statusAlpha * 0.7})`);
+          gradient.addColorStop(0.7, `rgba(139, 92, 246, ${statusAlpha * 0.5})`);
+          gradient.addColorStop(1, `rgba(148, 163, 184, ${normalAlpha * 0.3})`);
+        }
+        
+        // Enhanced glow for status dots
+        if (this.glowIntensity > 0.1) {
+          const glowColor = this.statusType === 'sync' 
+            ? `rgba(16, 185, 129, ${glowAlpha * this.statusTransition})`
+            : `rgba(59, 130, 246, ${glowAlpha * this.statusTransition})`;
+          ctx.shadowColor = glowColor;
+          ctx.shadowBlur = 25 * this.statusTransition;
+        }
+      } else {
+        // Normal dot colors
+        gradient.addColorStop(0, `rgba(71, 85, 105, ${alpha})`);
+        gradient.addColorStop(0.5, `rgba(100, 116, 139, ${alpha * 0.7})`);
+        gradient.addColorStop(1, `rgba(148, 163, 184, 0)`);
+        
+        // Normal glow effect
+        if (this.glowIntensity > 0.1) {
+          ctx.shadowColor = `rgba(30, 64, 175, ${glowAlpha})`;
+          ctx.shadowBlur = 18;
+        }
       }
 
       ctx.fillStyle = gradient;
@@ -147,7 +254,7 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
     }
   }
 
-  // Enhanced Connection class
+  // Enhanced Connection class with status networking support
   class Connection {
     constructor(point1, point2, isCursorConnection = false) {
       this.point1 = point1;
@@ -157,11 +264,20 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
       this.targetOpacity = isCursorConnection ? 0.9 : 0.7;
       this.createdAt = Date.now();
       this.isActive = true;
+      
+      // NEW: Status connection properties
+      this.isStatusConnection = false;
+      this.statusType = null;
+      this.isLongDistance = false;
+      this.pulseOffset = Math.random() * Math.PI * 2;
     }
 
     update() {
       if (this.isActive) {
-        this.opacity = Math.min(this.targetOpacity, this.opacity + 0.08);
+        // Enhanced opacity for status connections
+        const targetOpacity = this.isStatusConnection ? 0.9 : 
+                            (this.isCursorConnection ? 0.9 : 0.7);
+        this.opacity = Math.min(targetOpacity, this.opacity + 0.08);
       } else {
         this.opacity *= 0.88;
       }
@@ -174,42 +290,157 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
 
       const distance = calculateDistance(this.point1, this.point2);
       const maxDistance = this.isCursorConnection ? 
-        config.cursorConnectionDistance : config.connectionDistance;
+        config.cursorConnectionDistance : 
+        (this.isLongDistance ? config.connectionDistance * 2 : config.connectionDistance);
       
       const distanceOpacity = 1 - (distance / maxDistance);
-      const finalOpacity = this.opacity * distanceOpacity;
+      let finalOpacity = this.opacity * distanceOpacity;
 
       if (finalOpacity <= 0) return;
 
-      // Darker gradient lines
+      // NEW: Enhanced pulsing effect for status connections
+      if (this.isStatusConnection) {
+        const pulseEffect = Math.sin(animationTimeRef.current * 0.003 + this.pulseOffset) * 0.3 + 0.7;
+        finalOpacity *= pulseEffect;
+      }
+
+      // Status-aware connection colors with enhanced effects
       const gradient = ctx.createLinearGradient(
         this.point1.x, this.point1.y,
         this.point2.x, this.point2.y
       );
 
-      if (this.isCursorConnection) {
-        gradient.addColorStop(0, `rgba(30, 64, 175, ${finalOpacity})`);
-        gradient.addColorStop(1, `rgba(15, 23, 42, ${finalOpacity * 0.8})`);
-      } else {
-        gradient.addColorStop(0, `rgba(71, 85, 105, ${finalOpacity})`);
-        gradient.addColorStop(0.5, `rgba(100, 116, 139, ${finalOpacity * 0.9})`);
-        gradient.addColorStop(1, `rgba(71, 85, 105, ${finalOpacity})`);
+      // Determine connection color scheme
+      let statusType = this.statusType;
+      if (!statusType) {
+        if (this.point1.isStatusDot) statusType = this.point1.statusType;
+        else if (this.point2.isStatusDot) statusType = this.point2.statusType;
       }
 
-      // Enhanced glow effect
-      ctx.shadowColor = this.isCursorConnection ? 
-        `rgba(30, 64, 175, ${finalOpacity * 0.6})` : 
-        `rgba(71, 85, 105, ${finalOpacity * 0.4})`;
-      ctx.shadowBlur = this.isCursorConnection ? 10 : 6;
+      if (this.isCursorConnection) {
+        if (statusType === 'sync') {
+          gradient.addColorStop(0, `rgba(16, 185, 129, ${finalOpacity})`);
+          gradient.addColorStop(0.5, `rgba(34, 197, 94, ${finalOpacity * 1.1})`);
+          gradient.addColorStop(1, `rgba(16, 185, 129, ${finalOpacity * 0.8})`);
+        } else if (statusType === 'create') {
+          gradient.addColorStop(0, `rgba(59, 130, 246, ${finalOpacity})`);
+          gradient.addColorStop(0.5, `rgba(99, 102, 241, ${finalOpacity * 1.1})`);
+          gradient.addColorStop(1, `rgba(59, 130, 246, ${finalOpacity * 0.8})`);
+        } else {
+          gradient.addColorStop(0, `rgba(30, 64, 175, ${finalOpacity})`);
+          gradient.addColorStop(1, `rgba(15, 23, 42, ${finalOpacity * 0.8})`);
+        }
+      } else if (this.isStatusConnection) {
+        // Enhanced status connection colors with pulsing gradient
+        if (statusType === 'sync') {
+          const pulseIntensity = Math.sin(animationTimeRef.current * 0.004 + this.pulseOffset) * 0.2 + 0.8;
+          gradient.addColorStop(0, `rgba(16, 185, 129, ${finalOpacity * pulseIntensity})`);
+          gradient.addColorStop(0.3, `rgba(34, 197, 94, ${finalOpacity * 1.2 * pulseIntensity})`);
+          gradient.addColorStop(0.7, `rgba(59, 130, 246, ${finalOpacity * 0.8 * pulseIntensity})`);
+          gradient.addColorStop(1, `rgba(16, 185, 129, ${finalOpacity * pulseIntensity})`);
+        } else if (statusType === 'create') {
+          const pulseIntensity = Math.sin(animationTimeRef.current * 0.004 + this.pulseOffset + Math.PI) * 0.2 + 0.8;
+          gradient.addColorStop(0, `rgba(59, 130, 246, ${finalOpacity * pulseIntensity})`);
+          gradient.addColorStop(0.3, `rgba(99, 102, 241, ${finalOpacity * 1.2 * pulseIntensity})`);
+          gradient.addColorStop(0.7, `rgba(139, 92, 246, ${finalOpacity * 0.8 * pulseIntensity})`);
+          gradient.addColorStop(1, `rgba(59, 130, 246, ${finalOpacity * pulseIntensity})`);
+        }
+      } else {
+        // Regular connection colors
+        if (statusType === 'sync') {
+          gradient.addColorStop(0, `rgba(16, 185, 129, ${finalOpacity})`);
+          gradient.addColorStop(0.5, `rgba(34, 197, 94, ${finalOpacity * 0.9})`);
+          gradient.addColorStop(1, `rgba(16, 185, 129, ${finalOpacity})`);
+        } else if (statusType === 'create') {
+          gradient.addColorStop(0, `rgba(59, 130, 246, ${finalOpacity})`);
+          gradient.addColorStop(0.5, `rgba(99, 102, 241, ${finalOpacity * 0.9})`);
+          gradient.addColorStop(1, `rgba(59, 130, 246, ${finalOpacity})`);
+        } else {
+          gradient.addColorStop(0, `rgba(71, 85, 105, ${finalOpacity})`);
+          gradient.addColorStop(0.5, `rgba(100, 116, 139, ${finalOpacity * 0.9})`);
+          gradient.addColorStop(1, `rgba(71, 85, 105, ${finalOpacity})`);
+        }
+      }
 
+      // Enhanced glow effects for status connections
+      let shadowColor, shadowBlur;
+      if (this.isStatusConnection) {
+        const glowIntensity = Math.sin(animationTimeRef.current * 0.005 + this.pulseOffset) * 0.4 + 0.6;
+        if (statusType === 'sync') {
+          shadowColor = `rgba(16, 185, 129, ${finalOpacity * 0.8 * glowIntensity})`;
+          shadowBlur = this.isLongDistance ? 20 : 15;
+        } else if (statusType === 'create') {
+          shadowColor = `rgba(59, 130, 246, ${finalOpacity * 0.8 * glowIntensity})`;
+          shadowBlur = this.isLongDistance ? 20 : 15;
+        }
+      } else if (statusType === 'sync') {
+        shadowColor = `rgba(16, 185, 129, ${finalOpacity * 0.6})`;
+        shadowBlur = this.isCursorConnection ? 15 : 8;
+      } else if (statusType === 'create') {
+        shadowColor = `rgba(59, 130, 246, ${finalOpacity * 0.6})`;
+        shadowBlur = this.isCursorConnection ? 15 : 8;
+      } else {
+        shadowColor = this.isCursorConnection ? 
+          `rgba(30, 64, 175, ${finalOpacity * 0.6})` : 
+          `rgba(71, 85, 105, ${finalOpacity * 0.4})`;
+        shadowBlur = this.isCursorConnection ? 10 : 6;
+      }
+
+      // Enhanced line width for status connections
+      const lineWidth = this.isStatusConnection ? config.lineWidth * 1.4 : config.lineWidth;
+
+      ctx.shadowColor = shadowColor;
+      ctx.shadowBlur = shadowBlur;
       ctx.strokeStyle = gradient;
-      ctx.lineWidth = config.lineWidth;
+      ctx.lineWidth = lineWidth;
       ctx.beginPath();
       ctx.moveTo(this.point1.x, this.point1.y);
       ctx.lineTo(this.point2.x, this.point2.y);
       ctx.stroke();
 
+      // NEW: Add particle effect along status connections
+      if (this.isStatusConnection && finalOpacity > 0.5) {
+        this.drawConnectionParticle(ctx, finalOpacity);
+      }
+
       // Reset shadow
+      ctx.shadowBlur = 0;
+    }
+
+    // NEW: Draw moving particle along status connection
+    drawConnectionParticle(ctx, opacity) {
+      const time = animationTimeRef.current * 0.002;
+      const progress = (Math.sin(time + this.pulseOffset) + 1) / 2; // 0 to 1
+      
+      const particleX = this.point1.x + (this.point2.x - this.point1.x) * progress;
+      const particleY = this.point1.y + (this.point2.y - this.point1.y) * progress;
+      
+      const particleSize = 2;
+      const particleOpacity = opacity * 0.8;
+      
+      const particleGradient = ctx.createRadialGradient(
+        particleX, particleY, 0,
+        particleX, particleY, particleSize * 2
+      );
+      
+      if (this.statusType === 'sync') {
+        particleGradient.addColorStop(0, `rgba(34, 197, 94, ${particleOpacity})`);
+        particleGradient.addColorStop(1, `rgba(16, 185, 129, 0)`);
+      } else if (this.statusType === 'create') {
+        particleGradient.addColorStop(0, `rgba(99, 102, 241, ${particleOpacity})`);
+        particleGradient.addColorStop(1, `rgba(59, 130, 246, 0)`);
+      }
+      
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = this.statusType === 'sync' ? 
+        `rgba(34, 197, 94, ${particleOpacity})` : 
+        `rgba(99, 102, 241, ${particleOpacity})`;
+      
+      ctx.fillStyle = particleGradient;
+      ctx.beginPath();
+      ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
+      ctx.fill();
+      
       ctx.shadowBlur = 0;
     }
 
@@ -221,7 +452,7 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
   // Initialize dots with better spacing and movement setup
   const initializeDots = (width, height) => {
     const dots = [];
-    const minDistance = 140; // Adjusted for more dots
+    const minDistance = 140;
     
     for (let i = 0; i < config.dotCount; i++) {
       let x, y, validPosition = false, attempts = 0;
@@ -376,7 +607,7 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
     }
   };
 
-  // Enhanced animation loop with time-based animation
+  // Enhanced animation loop with time-based animation and status support
   const animate = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -386,7 +617,7 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
     const height = canvas.height;
     
     // Update animation time
-    animationTimeRef.current += 16; // Approximate 60fps
+    animationTimeRef.current += 16;
 
     // Clear canvas with darker gradient background
     const gradient = ctx.createLinearGradient(0, 0, width, height);
@@ -398,10 +629,10 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
-    // Update dots with time-based animation
+    // Update dots with time-based animation and status support
     dotsRef.current.forEach(dot => {
       dot.connections = [];
-      dot.update(animationTimeRef.current);
+      dot.update(animationTimeRef.current, width);
     });
 
     // Update connections
@@ -477,7 +708,7 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
     canvas.height = window.innerHeight;
 
     dotsRef.current = initializeDots(canvas.width, canvas.height);
-    animationTimeRef.current = 0; // Reset animation time
+    animationTimeRef.current = 0;
     animate();
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -531,25 +762,56 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
         />
       )}
       
-      {/* Enhanced mouse zoom indicator */}
-      {/* {mouseZoom.active && mouseZoom.strength > 0 && (
-        <div
-          style={{
-            position: 'fixed',
-            left: mouseZoom.x - 15,
-            top: mouseZoom.y - 15,
-            width: '30px',
-            height: '30px',
-            borderRadius: '50%',
-            border: `0.001px solid rgba(30, 64, 175, ${0.2 + mouseZoom.strength * 0.4})`,
-            pointerEvents: 'none',
-            zIndex: 1,
-            transform: `scale(${0.8 + mouseZoom.strength * 0.4})`,
-            transition: 'all 0.1s ease-out',
-            background: `radial-gradient(circle, rgba(30, 64, 175, ${mouseZoom.strength * 0.1}), transparent 70%)`
-          }}
-        />
-      )} */}
+      {/* NEW: Status indicators */}
+      {(autoSyncRunning || autoCreateRunning) && (
+        <>
+          {/* Auto-sync indicator (left) */}
+          {autoSyncRunning && (
+            <div
+              style={{
+                position: 'fixed',
+                top: '20px',
+                left: '20px',
+                padding: '8px 16px',
+                background: 'rgba(16, 185, 129, 0.15)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                borderRadius: '20px',
+                color: '#059669',
+                fontSize: '12px',
+                fontWeight: '600',
+                zIndex: 5,
+                animation: 'statusPulse 2s ease-in-out infinite'
+              }}
+            >
+              ● Auto-Sync Active
+            </div>
+          )}
+          
+          {/* Auto-create indicator (right) */}
+          {autoCreateRunning && (
+            <div
+              style={{
+                position: 'fixed',
+                top: '20px',
+                right: autoSyncRunning ? '180px' : '20px',
+                padding: '8px 16px',
+                background: 'rgba(59, 130, 246, 0.15)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                borderRadius: '20px',
+                color: '#2563eb',
+                fontSize: '12px',
+                fontWeight: '600',
+                zIndex: 5,
+                animation: 'statusPulse 2s ease-in-out infinite 0.5s'
+              }}
+            >
+              ● Auto-Create Active
+            </div>
+          )}
+        </>
+      )}
       
       <style jsx>{`
         @keyframes fastPulse {
@@ -560,6 +822,17 @@ const LuxuryBackground = ({ currentView, analysisData, selectedColumn, isLoading
           50% { 
             transform: scale(1.4);
             opacity: 1;
+          }
+        }
+        
+        @keyframes statusPulse {
+          0%, 100% { 
+            opacity: 0.8;
+            transform: scale(1);
+          }
+          50% { 
+            opacity: 1;
+            transform: scale(1.05);
           }
         }
         
