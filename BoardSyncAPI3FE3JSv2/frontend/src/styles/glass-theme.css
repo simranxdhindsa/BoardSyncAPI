@@ -88,14 +88,14 @@ body {
   background: transparent;
   position: relative;
   z-index: 1;
-  min-height: 100vh;
+  min-height: auto;
 }
 
 /* ApyHub header with enhanced glass theme and 3D separation */
 nav {
   background: rgba(255, 255, 255, 0.35);
   backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filt0er: blur(28px) saturate(180%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.3);
   box-shadow: 
     0 2px 8px rgba(0, 0, 0, 0.08),
@@ -502,21 +502,17 @@ button.active,
   color: #6b7280;
   font-weight: 500;
   z-index: 1000;
+  cursor: default;
   box-shadow: 
     0 8px 20px rgba(31, 38, 135, 0.15),
     inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  transition: all 0.3s ease;
+  transition: all 0.7s ease;
 }
 
 .credit-footer:hover {
-  background: rgba(255, 255, 255, 0.4);
-  transform: translateX(-50%) translateY(-3px);
-  box-shadow: 
-    0 12px 28px rgba(31, 38, 135, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(24px) saturate(200%);
-  -webkit-backdrop-filter: blur(24px) saturate(200%);
-}
+            opacity: 0;
+            transform: translateX(-50%) translateY(20px);
+        }
 
 /* ApyHub logo specific styling */
 .apyhub-logo {

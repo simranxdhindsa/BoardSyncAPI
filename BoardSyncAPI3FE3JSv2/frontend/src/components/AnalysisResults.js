@@ -12,7 +12,8 @@ const AnalysisResults = ({
   onCreateMissing, 
   onReAnalyze, 
   lastAction, 
-  loading 
+  loading, 
+  setNavBarSlots 
 }) => {
   const [syncing, setSyncing] = useState({});
   const [creating, setCreating] = useState({});
@@ -47,6 +48,7 @@ const AnalysisResults = ({
         onBack={handleBackFromDetail}
         onSync={onSync}
         onCreateSingle={onCreateSingle}
+        setNavBarSlots={setNavBarSlots}
       />
     );
   }
@@ -148,60 +150,7 @@ const AnalysisResults = ({
   return (
     <div className="min-h-screen">
       {/* ApyHub Header with Glass Theme + Ardoise Branding */}
-      <nav className="glass-panel border-b border-gray-200 bg-white px-6 py-4" style={{ borderRadius: '0' }}>
-        <div className="flex items-center justify-between">
-          {/* Left Side - ApyHub Logo */}
-          <div className="flex items-center space-x-8">
-            <div className="flex items-center">
-              <img 
-                src="https://apyhub.com/logo.svg" 
-                alt="ApyHub" 
-                className="h-8 w-8 apyhub-logo"
-              />
-              <span className="ml-3 text-xl font-semibold text-gray-900">
-                Analysis Results
-              </span>
-            </div>
-          </div>
-          
-          {/* Right Side - Ardoise Project + Back Button */}
-          <div className="flex items-center space-x-6">
-            {/* Back Button */}
-            <button 
-              onClick={onBack}
-              className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Dashboard
-            </button>
-            
-            {/* Ardoise Project Info */}
-            <div className="flex items-center space-x-3">
-              <div className="text-right">
-                <div className="text-sm font-semibold text-gray-900">Project name: Ardoise</div>
-                <div className="text-xs text-gray-500">Analysis View</div>
-              </div>
-              <div className="flex items-center">
-                <img 
-                  src="/assets/ardoise-logo.png" 
-                  alt="Ardoise Project" 
-                  className="h-10 w-10 rounded-lg shadow-sm"
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextSibling.style.display = 'flex';
-                  }}
-                />
-                <div 
-                  className="h-10 w-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg shadow-sm flex items-center justify-center text-white font-bold text-lg"
-                  style={{ display: 'none' }}
-                >
-                  A
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
+      
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Header */}
@@ -247,6 +196,8 @@ const AnalysisResults = ({
               Click to view details
             </div>
           </div>
+
+          
 
           <div 
             className="glass-panel bg-yellow-50 border border-yellow-200 rounded-lg p-4 cursor-pointer hover:shadow-lg transition-all"

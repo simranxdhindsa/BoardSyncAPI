@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, RefreshCw, Tag, EyeOff, Eye, Plus, CheckCircle, Clock, AlertTriangle, Trash2, X } from 'lucide-react';
 import { getTicketsByType, ignoreTicket, unignoreTicket, deleteTickets } from '../services/api';
 
-const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
+const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, setNavBarSlots }) => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -20,6 +20,90 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
   useEffect(() => {
     loadTickets();
   }, [type, column]);
+
+  // Configure NavBar content when this view is active
+  useEffect(() => {
+    const typeInfo = getTypeInfo();
+    const IconComponent = typeInfo.icon;
+    const left = (
+      <div className="flex items-center space-x-4">
+        <button 
+          onClick={onBack}
+          disabled={deleteMode}
+          className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Results
+        </button>
+        <div className="flex items-center">
+          <IconComponent className={`w-6 h-6 mr-2 text-${getTypeInfo().color}-600`} />
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">
+              {getTypeInfo().title}
+              {deleteMode && (
+                <span className="text-red-600 ml-2">• Delete Mode</span>
+              )}
+            </h1>
+            <p className="text-sm text-gray-600">{getTypeInfo().description}</p>
+          </div>
+        </div>
+      </div>
+    );
+
+    const right = (
+      <div className="flex items-center space-x-3">
+        {deleteMode ? (
+          <>
+            {selectedTickets.size > 0 && (
+              <button
+                onClick={handleSelectAll}
+                className="flex items-center bg-red-100 text-red-700 px-3 py-2 rounded-lg hover:bg-red-200 transition-colors text-sm"
+              >
+                {selectedTickets.size === tickets.length ? 'Deselect All' : 'Select All'}
+              </button>
+            )}
+            <button
+              onClick={handleExitDeleteMode}
+              className="flex items-center bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+            >
+              <X className="w-4 h-4 mr-1" />
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            {type !== 'ignored' && tickets.length > 0 && (
+              <button
+                onClick={handleEnterDeleteMode}
+                className="flex items-center bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors font-medium"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </button>
+            )}
+            <button
+              onClick={loadTickets}
+              disabled={loading}
+              className="flex items-center bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </>
+        )}
+      </div>
+    );
+
+    if (setNavBarSlots) {
+      setNavBarSlots(left, right);
+    }
+
+    return () => {
+      if (setNavBarSlots) {
+        setNavBarSlots(null, null);
+      }
+    };
+  }, [type, column, deleteMode, selectedTickets, tickets.length, loading]);
 
   // Clear selection when exiting delete mode
   useEffect(() => {
@@ -475,80 +559,6 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle }) => {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
-      <nav className="glass-panel border-b border-gray-200 bg-white px-6 py-4" style={{ borderRadius: '0' }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <button 
-              onClick={onBack}
-              disabled={deleteMode}
-              className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Results
-            </button>
-            
-            <div className="flex items-center">
-              <IconComponent className={`w-6 h-6 mr-2 text-${typeInfo.color}-600`} />
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">
-                  {typeInfo.title}
-                  {deleteMode && (
-                    <span className="text-red-600 ml-2">• Delete Mode</span>
-                  )}
-                </h1>
-                <p className="text-sm text-gray-600">{typeInfo.description}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex items-center space-x-3">
-            {/* Delete mode controls */}
-            {deleteMode ? (
-              <>
-                {selectedTickets.size > 0 && (
-                  <button
-                    onClick={handleSelectAll}
-                    className="flex items-center bg-red-100 text-red-700 px-3 py-2 rounded-lg hover:bg-red-200 transition-colors text-sm"
-                  >
-                    {selectedTickets.size === tickets.length ? 'Deselect All' : 'Select All'}
-                  </button>
-                )}
-                
-                <button
-                  onClick={handleExitDeleteMode}
-                  className="flex items-center bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm"
-                >
-                  <X className="w-4 h-4 mr-1" />
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                {canDelete && tickets.length > 0 && (
-                  <button
-                    onClick={handleEnterDeleteMode}
-                    className="flex items-center bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors font-medium"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete
-                  </button>
-                )}
-                
-                <button
-                  onClick={loadTickets}
-                  disabled={loading}
-                  className="flex items-center bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  Refresh
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
-
       <div className="max-w-6xl mx-auto px-6 py-8">
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">

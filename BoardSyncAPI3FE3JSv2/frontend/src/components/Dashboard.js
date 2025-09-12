@@ -153,62 +153,9 @@ const Dashboard = ({ selectedColumn, onColumnSelect, onAnalyze, loading }) => {
   };
 
   return (
-    <div className="min-h-screen">
-      {/* ApyHub Header with Glass Theme + Ardoise Branding */}
-      <nav className="glass-panel border-b border-gray-200 bg-white px-6 py-4" style={{ borderRadius: '0' }}>
-        <div className="flex items-center justify-between">
-          {/* Left Side - ApyHub Logo */}
-          <div className="flex items-center space-x-8">
-            <div className="flex items-center">
-              <img 
-                src="https://apyhub.com/logo.svg" 
-                alt="ApyHub" 
-                className="h-8 w-8 apyhub-logo"
-              />
-              <FluidText className="ml-3 text-xl font-semibold text-gray-900" sensitivity={1.5}>
-                Asana-YouTrack Sync
-              </FluidText>
-            </div>
-          </div>
-          
-          {/* Right Side - Ardoise Project Branding */}
-          <div className="flex items-center space-x-6">
-            {/* Connection Status */}
-            <div className="flex items-center text-sm text-gray-500">
-              <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-              <span>Connected</span>
-            </div>
-            
-            {/* Ardoise Project Info */}
-            <div className="flex items-center space-x-3">
-              <div className="text-right">
-                <div className="text-sm font-semibold text-gray-900">Project name: Ardoise</div>
-                <div className="text-xs text-gray-500">Enhanced Dashboard</div>
-              </div>
-              <div className="flex items-center">
-                <img 
-                  src="/assets/ardoise-logo.png" 
-                  alt="Ardoise Project" 
-                  className="h-10 w-10 rounded-lg shadow-sm"
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextSibling.style.display = 'flex';
-                  }}
-                />
-                <div 
-                  className="h-10 w-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg shadow-sm flex items-center justify-center text-white font-bold text-lg"
-                  style={{ display: 'none' }}
-                >
-                  A
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
-
+    <div>
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="pt-4 pb-8">
         {/* Header Section with Fluid Text */}
         <div className="mb-8">
           <FluidText className="text-3xl font-bold text-gray-900 mb-2 block" sensitivity={2}>
@@ -267,7 +214,7 @@ const Dashboard = ({ selectedColumn, onColumnSelect, onAnalyze, loading }) => {
                 </>
               )}
               <div className="text-xs text-gray-500 mt-2">
-                Automatically syncs mismatched tickets (excludes ignored tickets)
+                Your tickets stay in perfect sync, while the ignored ones remain undisturbed
               </div>
             </div>
           </div>
@@ -321,7 +268,7 @@ const Dashboard = ({ selectedColumn, onColumnSelect, onAnalyze, loading }) => {
                 </>
               )}
               <div className="text-xs text-gray-500 mt-2">
-                Automatically creates missing tickets (excludes ignored tickets)
+                Creates what’s missing, but never touches the tickets you’ve sidelined
               </div>
             </div>
           </div>
