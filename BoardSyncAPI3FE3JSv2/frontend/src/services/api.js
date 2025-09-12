@@ -4,12 +4,24 @@ const API_BASE =
     ? process.env.REACT_APP_API_URL || 'https://boardsyncapi.onrender.com'
     : 'http://localhost:8080';
 
-export const analyzeTickets = async () => {
-  const response = await fetch(`${API_BASE}/analyze`);
+export const analyzeTickets = async (columnFilter = '') => {
+  // Build the URL with column parameter if provided
+  let url = `${API_BASE}/analyze`;
+  if (columnFilter) {
+    url += `?column=${encodeURIComponent(columnFilter)}`;
+  }
+  
+  console.log('Analyzing tickets with column filter:', columnFilter); // DEBUG
+  console.log('API URL:', url); // DEBUG
+  
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Analysis failed: ${response.status}`);
   }
-  return response.json();
+  const result = await response.json();
+  
+  console.log('Analysis result:', result); // DEBUG
+  return result;
 };
 
 export const syncTickets = async (tickets) => {

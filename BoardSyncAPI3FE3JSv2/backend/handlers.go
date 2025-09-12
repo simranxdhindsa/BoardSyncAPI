@@ -90,7 +90,34 @@ func analyzeTicketsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	analysis, err := performTicketAnalysis(allColumns)
+	// NEW: Get column filter from query parameters
+	columnFilter := r.URL.Query().Get("column")
+
+	// Default to all syncable columns if no specific column is requested
+	var columnsToAnalyze []string
+	if columnFilter == "" || columnFilter == "all_syncable" {
+		columnsToAnalyze = syncableColumns
+	} else {
+		// Map frontend column names to backend column names
+		columnMap := map[string]string{
+			"backlog":         "backlog",
+			"in_progress":     "in progress",
+			"dev":             "dev",
+			"stage":           "stage",
+			"blocked":         "blocked",
+			"ready_for_stage": "ready for stage",
+			"findings":        "findings",
+		}
+
+		if mappedColumn, exists := columnMap[columnFilter]; exists {
+			columnsToAnalyze = []string{mappedColumn}
+		} else {
+			columnsToAnalyze = syncableColumns // fallback
+		}
+	}
+
+	// FIXED: Pass the specific columns instead of always using syncableColumns
+	analysis, err := performTicketAnalysis(columnsToAnalyze)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Analysis failed: %v", err), http.StatusInternalServerError)
 		return
@@ -109,9 +136,10 @@ func analyzeTicketsHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":    "success",
-		"timestamp": time.Now().Format(time.RFC3339),
-		"analysis":  analysis,
+		"status":        "success",
+		"timestamp":     time.Now().Format(time.RFC3339),
+		"analysis":      analysis,
+		"column_filter": columnFilter, // NEW: Include the filter in response
 		"summary": map[string]int{
 			"matched":           len(analysis.Matched),
 			"mismatched":        len(analysis.Mismatched),

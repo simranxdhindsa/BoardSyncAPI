@@ -734,17 +734,26 @@ func isDuplicateTicket(title string) bool {
 
 // Analysis Functions
 func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
+	fmt.Printf("Starting analysis for columns: %v\n", selectedColumns) // DEBUG
+
 	allAsanaTasks, err := getAsanaTasks()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Asana tasks: %v", err)
 	}
 
+	fmt.Printf("Retrieved %d total Asana tasks\n", len(allAsanaTasks)) // DEBUG
+
+	// FIXED: Filter tasks by the specified columns
 	asanaTasks := filterAsanaTasksByColumns(allAsanaTasks, selectedColumns)
+
+	fmt.Printf("After filtering by columns %v: %d tasks remain\n", selectedColumns, len(asanaTasks)) // DEBUG
 
 	youTrackIssues, err := getYouTrackIssues()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get YouTrack issues: %v", err)
 	}
+
+	fmt.Printf("Retrieved %d YouTrack issues\n", len(youTrackIssues)) // DEBUG
 
 	youTrackMap := make(map[string]YouTrackIssue)
 	asanaMap := make(map[string]AsanaTask)
@@ -761,7 +770,7 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 	}
 
 	analysis := &TicketAnalysis{
-		SelectedColumn:   strings.Join(selectedColumns, ", "),
+		SelectedColumn:   strings.Join(selectedColumns, ", "), // FIXED: Show actual selected columns
 		Matched:          []MatchedTicket{},
 		Mismatched:       []MismatchedTicket{},
 		MissingYouTrack:  []AsanaTask{},
@@ -773,6 +782,7 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 		Ignored:          getMapKeys(ignoredTicketsForever),
 	}
 
+	// Continue with the rest of the analysis logic...
 	for _, task := range asanaTasks {
 		if isIgnored(task.GID) {
 			continue
@@ -843,6 +853,7 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 		}
 	}
 
+	// Handle orphaned YouTrack issues (only include those that would have been in the selected columns)
 	for _, issue := range youTrackIssues {
 		asanaID := extractAsanaID(issue)
 		if asanaID != "" {
@@ -851,6 +862,9 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 			}
 		}
 	}
+
+	fmt.Printf("Analysis complete: %d matched, %d mismatched, %d missing\n",
+		len(analysis.Matched), len(analysis.Mismatched), len(analysis.MissingYouTrack)) // DEBUG
 
 	return analysis, nil
 }
@@ -1116,18 +1130,50 @@ func isActiveYouTrackStatus(status string) bool {
 }
 
 func filterAsanaTasksByColumns(tasks []AsanaTask, selectedColumns []string) []AsanaTask {
+	if len(selectedColumns) == 0 {
+		return tasks
+	}
+
 	filtered := []AsanaTask{}
 	for _, task := range tasks {
 		if len(task.Memberships) > 0 {
 			sectionName := strings.ToLower(task.Memberships[0].Section.Name)
+
+			// Check if task's section matches ANY of the selected columns
 			for _, selectedCol := range selectedColumns {
-				if strings.Contains(sectionName, strings.ToLower(selectedCol)) {
+				selectedColLower := strings.ToLower(selectedCol)
+
+				// MORE PRECISE matching - check for exact matches or specific patterns
+				var matches bool
+				switch selectedColLower {
+				case "backlog":
+					matches = strings.Contains(sectionName, "backlog")
+				case "in progress":
+					matches = strings.Contains(sectionName, "in progress") || strings.Contains(sectionName, "progress")
+				case "dev":
+					matches = strings.Contains(sectionName, "dev") && !strings.Contains(sectionName, "ready")
+				case "stage":
+					matches = strings.Contains(sectionName, "stage") && !strings.Contains(sectionName, "ready")
+				case "blocked":
+					matches = strings.Contains(sectionName, "blocked")
+				case "ready for stage":
+					matches = strings.Contains(sectionName, "ready for stage") || strings.Contains(sectionName, "ready") && strings.Contains(sectionName, "stage")
+				case "findings":
+					matches = strings.Contains(sectionName, "findings")
+				default:
+					// Fallback to contains check for any other columns
+					matches = strings.Contains(sectionName, selectedColLower)
+				}
+
+				if matches {
 					filtered = append(filtered, task)
-					break
+					break // Found a match, no need to check other columns for this task
 				}
 			}
 		}
 	}
+
+	fmt.Printf("Filtered %d tasks from %d total for columns: %v\n", len(filtered), len(tasks), selectedColumns)
 	return filtered
 }
 

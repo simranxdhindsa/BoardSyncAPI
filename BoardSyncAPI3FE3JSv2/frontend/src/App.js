@@ -18,22 +18,23 @@ function App() {
     setSelectedColumn(column);
   };
 
-  const handleAnalyze = async () => {
-    if (!selectedColumn) return;
+const handleAnalyze = async () => {
+  if (!selectedColumn) return;
 
-    setLoading(true);
-    
-    try {
-      const data = await analyzeTickets();
-      setAnalysisData(data);
-      setCurrentView('results');
-    } catch (error) {
-      console.error('Analysis failed:', error);
-      alert('Analysis failed: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  setLoading(true);
+  
+  try {
+    // FIXED: Pass the selectedColumn to the API call
+    const data = await analyzeTickets(selectedColumn);
+    setAnalysisData(data);
+    setCurrentView('results');
+  } catch (error) {
+    console.error('Analysis failed:', error);
+    alert('Analysis failed: ' + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleBackToDashboard = () => {
     setCurrentView('dashboard');
