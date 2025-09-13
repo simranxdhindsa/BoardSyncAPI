@@ -90,15 +90,19 @@ func analyzeTicketsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// NEW: Get column filter from query parameters
+	// Get column filter from query parameters
 	columnFilter := r.URL.Query().Get("column")
+	fmt.Printf("ANALYZE DEBUG: Received column filter: '%s'\n", columnFilter)
 
-	// Default to all syncable columns if no specific column is requested
+	// FIXED: Proper column mapping and filtering
 	var columnsToAnalyze []string
+	var mappedColumnName string
+
 	if columnFilter == "" || columnFilter == "all_syncable" {
 		columnsToAnalyze = syncableColumns
+		mappedColumnName = "all_syncable"
 	} else {
-		// Map frontend column names to backend column names
+		// CRITICAL: Frontend to backend column name mapping
 		columnMap := map[string]string{
 			"backlog":         "backlog",
 			"in_progress":     "in progress",
@@ -111,18 +115,26 @@ func analyzeTicketsHandler(w http.ResponseWriter, r *http.Request) {
 
 		if mappedColumn, exists := columnMap[columnFilter]; exists {
 			columnsToAnalyze = []string{mappedColumn}
+			mappedColumnName = mappedColumn
+			fmt.Printf("ANALYZE DEBUG: Column '%s' mapped to '%s'\n", columnFilter, mappedColumn)
 		} else {
-			columnsToAnalyze = syncableColumns // fallback
+			fmt.Printf("ANALYZE DEBUG: Unknown column '%s', using all syncable columns\n", columnFilter)
+			columnsToAnalyze = syncableColumns
+			mappedColumnName = "all_syncable"
 		}
 	}
 
-	// FIXED: Pass the specific columns instead of always using syncableColumns
+	fmt.Printf("ANALYZE DEBUG: Final columns to analyze: %v\n", columnsToAnalyze)
+
+	// Perform analysis with the specific columns
 	analysis, err := performTicketAnalysis(columnsToAnalyze)
 	if err != nil {
+		fmt.Printf("ANALYZE DEBUG: Analysis failed: %v\n", err)
 		http.Error(w, fmt.Sprintf("Analysis failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	// Count different types of mismatches
 	tagMismatchCount := 0
 	statusMismatchCount := 0
 	for _, ticket := range analysis.Mismatched {
@@ -134,12 +146,17 @@ func analyzeTicketsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	fmt.Printf("ANALYZE DEBUG: Analysis complete - Matched: %d, Mismatched: %d, Missing: %d\n",
+		len(analysis.Matched), len(analysis.Mismatched), len(analysis.MissingYouTrack))
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":        "success",
-		"timestamp":     time.Now().Format(time.RFC3339),
-		"analysis":      analysis,
-		"column_filter": columnFilter, // NEW: Include the filter in response
+		"status":           "success",
+		"timestamp":        time.Now().Format(time.RFC3339),
+		"analysis":         analysis,
+		"column_filter":    columnFilter,
+		"mapped_column":    mappedColumnName,
+		"analyzed_columns": columnsToAnalyze,
 		"summary": map[string]int{
 			"matched":           len(analysis.Matched),
 			"mismatched":        len(analysis.Mismatched),
@@ -157,6 +174,7 @@ func analyzeTicketsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Get tickets by type handler
+// FIXED: Update the getTicketsByTypeHandler to accept column parameter
 func getTicketsByTypeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
@@ -180,7 +198,7 @@ func getTicketsByTypeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle ignored tickets separately
+	// Handle ignored tickets separately (they don't have column context)
 	if ticketType == "ignored" {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -192,8 +210,37 @@ func getTicketsByTypeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	analysis, err := performTicketAnalysis(allColumns)
+	// CRITICAL FIX: Determine which columns to analyze based on the column parameter
+	var columnsToAnalyze []string
+	if column == "" || column == "all_syncable" {
+		columnsToAnalyze = syncableColumns
+	} else {
+		// FIXED: Proper frontend to backend column name mapping
+		columnMap := map[string]string{
+			"backlog":         "backlog",
+			"in_progress":     "in progress",
+			"dev":             "dev",
+			"stage":           "stage",
+			"blocked":         "blocked",
+			"ready_for_stage": "ready for stage",
+			"findings":        "findings",
+		}
+
+		if mappedColumn, exists := columnMap[column]; exists {
+			columnsToAnalyze = []string{mappedColumn}
+			fmt.Printf("HANDLER DEBUG: Analyzing column '%s' mapped to '%s'\n", column, mappedColumn)
+		} else {
+			fmt.Printf("HANDLER DEBUG: Unknown column '%s', falling back to all syncable columns\n", column)
+			columnsToAnalyze = syncableColumns
+		}
+	}
+
+	fmt.Printf("HANDLER DEBUG: Final columns to analyze: %v\n", columnsToAnalyze)
+
+	// Use the column-specific analysis
+	analysis, err := performTicketAnalysis(columnsToAnalyze)
 	if err != nil {
+		fmt.Printf("HANDLER DEBUG: Analysis failed: %v\n", err)
 		http.Error(w, fmt.Sprintf("Analysis failed: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -228,13 +275,16 @@ func getTicketsByTypeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Printf("HANDLER DEBUG: Returning %d tickets of type '%s' for column '%s'\n", count, ticketType, column)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":  "success",
-		"type":    ticketType,
-		"column":  column,
-		"tickets": tickets,
-		"count":   count,
+		"status":           "success",
+		"type":             ticketType,
+		"column":           column,
+		"analyzed_columns": columnsToAnalyze,
+		"tickets":          tickets,
+		"count":            count,
 	})
 }
 

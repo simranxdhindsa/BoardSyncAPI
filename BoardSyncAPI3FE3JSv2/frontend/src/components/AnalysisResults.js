@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, RefreshCw, Tag, Eye, EyeOff } from 'lucide-react';
-import ReAnalysisPanel from './ReAnalysisPanel';
 import TicketDetailView from './TicketDetailView';
+import { analyzeTickets } from '../services/api';
 
 const AnalysisResults = ({ 
   analysisData, 
@@ -10,9 +10,6 @@ const AnalysisResults = ({
   onSync, 
   onCreateSingle, 
   onCreateMissing, 
-  onReAnalyze, 
-  lastAction, 
-  loading, 
   setNavBarSlots 
 }) => {
   const [syncing, setSyncing] = useState({});
@@ -22,19 +19,37 @@ const AnalysisResults = ({
   const [syncedTickets, setSyncedTickets] = useState(new Set());
   const [createdTickets, setCreatedTickets] = useState(new Set());
   
-  // NEW: Detail view state
-  const [detailView, setDetailView] = useState(null); // { type: 'matched', column: 'all' }
+  // Detail view state
+  const [detailView, setDetailView] = useState(null);
+  
+  // NEW: Re-analyze functionality
+  const [reAnalyzeLoading, setReAnalyzeLoading] = useState(false);
+  const [currentAnalysisData, setCurrentAnalysisData] = useState(analysisData);
 
-  if (!analysisData) return null;
+  if (!currentAnalysisData) return null;
 
-  const { analysis, summary } = analysisData;
+  const { analysis, summary } = currentAnalysisData;
 
-  // NEW: Handle clicking on summary cards to drill down
+  // NEW: Re-analyze the same column
+  const handleReAnalyze = async () => {
+    setReAnalyzeLoading(true);
+    try {
+      const data = await analyzeTickets(selectedColumn);
+      setCurrentAnalysisData(data);
+    } catch (error) {
+      console.error('Re-analysis failed:', error);
+      alert('Re-analysis failed: ' + error.message);
+    } finally {
+      setReAnalyzeLoading(false);
+    }
+  };
+
+  // Handle clicking on summary cards to drill down
   const handleSummaryCardClick = (type) => {
     setDetailView({ type, column: selectedColumn });
   };
 
-  // NEW: Handle back from detail view
+  // Handle back from detail view
   const handleBackFromDetail = () => {
     setDetailView(null);
   };
@@ -62,7 +77,6 @@ const AnalysisResults = ({
       await onSync(ticketId);
       setSyncedTickets(prev => new Set([...prev, ticketId]));
       
-      // Show success for 2 seconds
       setTimeout(() => {
         setSyncedTickets(prev => {
           const newSet = new Set(prev);
@@ -84,7 +98,6 @@ const AnalysisResults = ({
     setSyncAllLoading(true);
     
     try {
-      // Sync all mismatched tickets
       for (const ticket of analysis.mismatched) {
         await onSync(ticket.asana_task.gid);
       }
@@ -104,7 +117,6 @@ const AnalysisResults = ({
       await onCreateSingle(taskId);
       setCreatedTickets(prev => new Set([...prev, taskId]));
       
-      // Show success for 2 seconds
       setTimeout(() => {
         setCreatedTickets(prev => {
           const newSet = new Set(prev);
@@ -150,16 +162,34 @@ const AnalysisResults = ({
 
   return (
     <div className="min-h-screen">
-      {/* ApyHub Header with Glass Theme + Ardoise Branding */}
-      
-
       <div className="max-w-6xl mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Analysis Results - {selectedColumn?.toUpperCase?.() || 'ALL'}
-          </h1>
-          <p className="text-gray-600">Review mismatches, sync tickets, and manage tags. Click on any summary card to see detailed views.</p>
+        {/* Header with Re-analyze Button */}
+        <div className="mb-8 flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Analysis Results - {selectedColumn?.toUpperCase?.() || 'ALL'}
+            </h1>
+            <p className="text-gray-600">Review mismatches, sync tickets, and manage tags. Click on any summary card to see detailed views.</p>
+          </div>
+          
+          {/* NEW: Re-analyze Button */}
+          <button
+            onClick={handleReAnalyze}
+            disabled={reAnalyzeLoading}
+            className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium"
+          >
+            {reAnalyzeLoading ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                Re-analyzing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Re-analyze 
+              </>
+            )}
+          </button>
         </div>
 
         {/* High Priority Alerts */}
@@ -179,7 +209,7 @@ const AnalysisResults = ({
           </div>
         )}
 
-        {/* Summary Cards with Glass Theme - NOW CLICKABLE */}
+        {/* Summary Cards with Glass Theme - CLICKABLE */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
           <div 
             className="glass-panel bg-green-50 border border-green-200 rounded-lg p-4 cursor-pointer hover:shadow-lg transition-all"
@@ -197,8 +227,6 @@ const AnalysisResults = ({
               Click to view details
             </div>
           </div>
-
-          
 
           <div 
             className="glass-panel bg-yellow-50 border border-yellow-200 rounded-lg p-4 cursor-pointer hover:shadow-lg transition-all"
@@ -263,18 +291,6 @@ const AnalysisResults = ({
             </div>
           </div>
         </div>
-
-        {/* Smart Re-Analysis Panel - Show after successful actions */}
-        {lastAction && (
-          <ReAnalysisPanel
-            selectedColumn={selectedColumn}
-            lastActionType={lastAction.type}
-            lastActionCount={lastAction.count}
-            onReAnalyze={onReAnalyze}
-            onBackToDashboard={onBack}
-            loading={loading}
-          />
-        )}
 
         {/* Mismatched Tickets */}
         {summary.mismatched > 0 && (

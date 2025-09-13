@@ -9,7 +9,7 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
   const [actionLoading, setActionLoading] = useState({});
   const [ignoredTickets, setIgnoredTickets] = useState(new Set());
   
-  // NEW: Enhanced delete UX state
+  // Enhanced delete UX state
   const [deleteMode, setDeleteMode] = useState(false);
   const [selectedTickets, setSelectedTickets] = useState(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState(-1);
@@ -17,7 +17,7 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteSource, setDeleteSource] = useState('');
 
-  // NEW: Create all loading state
+  // Create all loading state
   const [createAllLoading, setCreateAllLoading] = useState(false);
 
   useEffect(() => {
@@ -43,11 +43,25 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
           <div>
             <h1 className="text-xl font-semibold text-gray-900">
               {getTypeInfo().title}
+              
+              {column && column !== 'all_syncable' && (
+                <span className="text-blue-600 ml-2">
+                  • {column.replace('_', ' ').toUpperCase()} Column
+                </span>
+              )}
               {deleteMode && (
                 <span className="text-red-600 ml-2">• Delete Mode</span>
               )}
             </h1>
-            <p className="text-sm text-gray-600">{getTypeInfo().description}</p>
+            {/* <p className="text-sm text-gray-600">
+              {getTypeInfo().description}
+              
+              {column && column !== 'all_syncable' && (
+                <span className="text-blue-600 ml-1">
+                  (filtered by {column.replace('_', ' ')} column)
+                </span>
+              )}
+            </p> */}
           </div>
         </div>
       </div>
@@ -75,7 +89,7 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
           </>
         ) : (
           <>
-            {/* NEW: Create All Button for missing tickets */}
+            {/* Create All Button for missing tickets */}
             {type === 'missing' && tickets.length > 0 && onCreateMissing && (
               <button
                 onClick={handleCreateAll}
@@ -90,7 +104,7 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
                 ) : (
                   <>
                     <Plus className="w-4 h-4 mr-2" />
-                    Create All
+                    Create All ({tickets.length})
                   </>
                 )}
               </button>
@@ -139,25 +153,32 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
   const loadTickets = async () => {
     setLoading(true);
     setError(null);
+    
+    console.log('Loading tickets for type:', type, 'column:', column); // DEBUG
+    
     try {
-      const response = await getTicketsByType(type, column);
+      // CRITICAL: Ensure we pass the column parameter correctly
+      const response = await getTicketsByType(type, column || '');
+      console.log('Received tickets response:', response); // DEBUG
+      
       setTickets(response.tickets || []);
-      setDeleteMode(false); // Reset delete mode on reload
+      setDeleteMode(false);
     } catch (err) {
+      console.error('Failed to load tickets:', err); // DEBUG
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // NEW: Handle create all missing tickets
+  // Handle create all missing tickets
   const handleCreateAll = async () => {
     if (!onCreateMissing || tickets.length === 0) return;
     
     setCreateAllLoading(true);
     try {
       await onCreateMissing();
-      setTimeout(loadTickets, 1000); // Refresh after creation
+      setTimeout(loadTickets, 1000);
     } catch (err) {
       console.error('Failed to create all tickets:', err);
       alert('Failed to create all tickets: ' + err.message);
@@ -232,14 +253,13 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
     }
   };
 
-  // NEW: Enhanced ticket selection with shift+click support
+  // Enhanced ticket selection with shift+click support
   const handleTicketClick = (ticketId, index, event) => {
     if (!deleteMode) return;
     
     event.preventDefault();
     
     if (event.shiftKey && lastSelectedIndex !== -1) {
-      // Range selection with Shift+Click
       const startIndex = Math.min(lastSelectedIndex, index);
       const endIndex = Math.max(lastSelectedIndex, index);
       
@@ -251,7 +271,6 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
       }
       setSelectedTickets(newSelected);
     } else {
-      // Single selection toggle
       setSelectedTickets(prev => {
         const newSet = new Set(prev);
         if (newSet.has(ticketId)) {
@@ -265,7 +284,7 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
     }
   };
 
-  // NEW: Delete mode controls
+  // Delete mode controls
   const handleEnterDeleteMode = () => {
     setDeleteMode(true);
   };
@@ -605,6 +624,10 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
               <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
               <p className="text-red-800">Error loading tickets: {error}</p>
             </div>
+            
+            {/* <div className="mt-2 text-sm text-red-600">
+              Debug: Type={type}, Column={column || 'none'}
+            </div> */}
           </div>
         )}
 
@@ -724,20 +747,34 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
             <IconComponent className={`w-16 h-16 mx-auto text-${typeInfo.color}-400 mb-4`} />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               No {typeInfo.title.toLowerCase()} found
+              
             </h3>
             <p className="text-gray-600">
               {type === 'ignored' && 'No tickets are currently being ignored.'}
-              {type === 'matched' && 'All tickets are either mismatched or missing.'}
-              {type === 'mismatched' && 'All tickets are properly synchronized.'}
-              {type === 'missing' && 'All Asana tickets already exist in YouTrack.'}
+              {type === 'matched' && column && column !== 'all_syncable' && `All tickets in ${column.replace('_', ' ')} column are either mismatched or missing.`}
+              {type === 'matched' && (!column || column === 'all_syncable') && 'All tickets are either mismatched or missing.'}
+              {type === 'mismatched' && column && column !== 'all_syncable' && `All tickets in ${column.replace('_', ' ')} column are properly synchronized.`}
+              {type === 'mismatched' && (!column || column === 'all_syncable') && 'All tickets are properly synchronized.'}
+              {type === 'missing' && column && column !== 'all_syncable' && `All Asana tickets in ${column.replace('_', ' ')} column already exist in YouTrack.`}
+              {type === 'missing' && (!column || column === 'all_syncable') && 'All Asana tickets already exist in YouTrack.'}
               {!['ignored', 'matched', 'mismatched', 'missing'].includes(type) && 'No tickets found for this category.'}
             </p>
+            {/* NEW: Debug info for troubleshooting */}
+            {/* <div className="mt-4 text-xs text-gray-400">
+              Debug: Loaded {tickets.length} tickets for type="{type}" column="{column || 'none'}"
+            </div> */}
           </div>
         ) : (
           <>
             <div className="mb-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 {typeInfo.title} ({tickets.length})
+                {/* NEW: Show column context */}
+                {column && column !== 'all_syncable' && (
+                  <span className="text-blue-600 text-lg font-normal ml-2">
+                    • {column.replace('_', ' ').toUpperCase()} Column
+                  </span>
+                )}
                 {selectedTickets.size > 0 && (
                   <span className="text-red-600 ml-2">
                     • {selectedTickets.size} selected
@@ -746,6 +783,11 @@ const TicketDetailView = ({ type, column, onBack, onSync, onCreateSingle, onCrea
               </h2>
               <p className="text-gray-600">
                 {typeInfo.description}
+                {column && column !== 'all_syncable' && (
+                  <span className="text-blue-600 ml-1">
+                    (showing only tickets from {column.replace('_', ' ')} column)
+                  </span>
+                )}
                 {deleteMode && (
                   <span className="text-red-600 ml-2">
                     • Click tickets to select • Shift+Click for range selection

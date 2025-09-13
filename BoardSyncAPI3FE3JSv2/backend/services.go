@@ -734,30 +734,30 @@ func isDuplicateTicket(title string) bool {
 
 // Analysis Functions
 func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
-	fmt.Printf("Starting analysis for columns: %v\n", selectedColumns) // DEBUG
+	fmt.Printf("ANALYSIS DEBUG: Starting analysis for columns: %v\n", selectedColumns)
 
 	allAsanaTasks, err := getAsanaTasks()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Asana tasks: %v", err)
 	}
 
-	fmt.Printf("Retrieved %d total Asana tasks\n", len(allAsanaTasks)) // DEBUG
+	fmt.Printf("ANALYSIS DEBUG: Retrieved %d total Asana tasks\n", len(allAsanaTasks))
 
-	// FIXED: Filter tasks by the specified columns
+	// CRITICAL: Filter tasks by the specified columns
 	asanaTasks := filterAsanaTasksByColumns(allAsanaTasks, selectedColumns)
-
-	fmt.Printf("After filtering by columns %v: %d tasks remain\n", selectedColumns, len(asanaTasks)) // DEBUG
+	fmt.Printf("ANALYSIS DEBUG: After filtering by columns %v: %d tasks remain\n", selectedColumns, len(asanaTasks))
 
 	youTrackIssues, err := getYouTrackIssues()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get YouTrack issues: %v", err)
 	}
 
-	fmt.Printf("Retrieved %d YouTrack issues\n", len(youTrackIssues)) // DEBUG
+	fmt.Printf("ANALYSIS DEBUG: Retrieved %d YouTrack issues\n", len(youTrackIssues))
 
 	youTrackMap := make(map[string]YouTrackIssue)
 	asanaMap := make(map[string]AsanaTask)
 
+	// Build maps for efficient lookup
 	for _, issue := range youTrackIssues {
 		asanaID := extractAsanaID(issue)
 		if asanaID != "" {
@@ -765,12 +765,12 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 		}
 	}
 
-	for _, task := range asanaTasks {
+	for _, task := range asanaTasks { // Use filtered tasks
 		asanaMap[task.GID] = task
 	}
 
 	analysis := &TicketAnalysis{
-		SelectedColumn:   strings.Join(selectedColumns, ", "), // FIXED: Show actual selected columns
+		SelectedColumn:   strings.Join(selectedColumns, ", "),
 		Matched:          []MatchedTicket{},
 		Mismatched:       []MismatchedTicket{},
 		MissingYouTrack:  []AsanaTask{},
@@ -782,8 +782,8 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 		Ignored:          getMapKeys(ignoredTicketsForever),
 	}
 
-	// Continue with the rest of the analysis logic...
-	for _, task := range asanaTasks {
+	// Process only the filtered Asana tasks
+	for _, task := range asanaTasks { // Use filtered tasks here too
 		if isIgnored(task.GID) {
 			continue
 		}
@@ -853,18 +853,54 @@ func performTicketAnalysis(selectedColumns []string) (*TicketAnalysis, error) {
 		}
 	}
 
-	// Handle orphaned YouTrack issues (only include those that would have been in the selected columns)
+	// Handle orphaned YouTrack issues - only include those that would have been in the selected columns
+	// This is trickier because we need to check if the YouTrack issue corresponds to an Asana task
+	// that would have been in our filtered set
 	for _, issue := range youTrackIssues {
 		asanaID := extractAsanaID(issue)
 		if asanaID != "" {
-			if _, exists := asanaMap[asanaID]; !exists {
+			// Check if this issue corresponds to a task that should have been in our analysis
+			// First, check if it exists in our original unfiltered task set
+			taskExists := false
+			var originalTask AsanaTask
+			for _, originalTask = range allAsanaTasks {
+				if originalTask.GID == asanaID {
+					taskExists = true
+					break
+				}
+			}
+
+			if taskExists {
+				// Now check if this task would have been in our filtered set
+				filteredTaskExists := false
+				for _, filteredTask := range asanaTasks {
+					if filteredTask.GID == asanaID {
+						filteredTaskExists = true
+						break
+					}
+				}
+
+				// If the task exists in the original set but not in our filtered set,
+				// and we don't have it in our asanaMap, then it's orphaned from our perspective
+				if !filteredTaskExists {
+					// This YouTrack issue corresponds to an Asana task that wasn't in our filtered columns
+					// We should include it as orphaned only if the original task would have been syncable
+					if len(originalTask.Memberships) > 0 {
+						originalSectionName := strings.ToLower(originalTask.Memberships[0].Section.Name)
+						if isSyncableColumn(originalSectionName) {
+							analysis.OrphanedYouTrack = append(analysis.OrphanedYouTrack, issue)
+						}
+					}
+				}
+			} else {
+				// The YouTrack issue references an Asana task that doesn't exist at all
 				analysis.OrphanedYouTrack = append(analysis.OrphanedYouTrack, issue)
 			}
 		}
 	}
 
-	fmt.Printf("Analysis complete: %d matched, %d mismatched, %d missing\n",
-		len(analysis.Matched), len(analysis.Mismatched), len(analysis.MissingYouTrack)) // DEBUG
+	fmt.Printf("ANALYSIS DEBUG: Analysis complete: %d matched, %d mismatched, %d missing, %d orphaned\n",
+		len(analysis.Matched), len(analysis.Mismatched), len(analysis.MissingYouTrack), len(analysis.OrphanedYouTrack))
 
 	return analysis, nil
 }
@@ -1110,10 +1146,42 @@ func getSectionName(task AsanaTask) string {
 }
 
 func isSyncableColumn(sectionName string) bool {
-	sectionLower := strings.ToLower(sectionName)
+	sectionLower := strings.ToLower(strings.TrimSpace(sectionName))
+
+	// Check against syncable columns with precise matching
 	for _, col := range syncableColumns {
-		if strings.Contains(sectionLower, strings.ToLower(col)) {
-			return true
+		colLower := strings.ToLower(col)
+
+		switch colLower {
+		case "backlog":
+			if strings.Contains(sectionLower, "backlog") &&
+				!strings.Contains(sectionLower, "dev") &&
+				!strings.Contains(sectionLower, "stage") &&
+				!strings.Contains(sectionLower, "blocked") &&
+				!strings.Contains(sectionLower, "progress") {
+				return true
+			}
+		case "in progress":
+			if strings.Contains(sectionLower, "in progress") ||
+				(strings.Contains(sectionLower, "progress") && !strings.Contains(sectionLower, "backlog")) {
+				return true
+			}
+		case "dev":
+			if strings.Contains(sectionLower, "dev") && !strings.Contains(sectionLower, "ready") {
+				return true
+			}
+		case "stage":
+			if strings.Contains(sectionLower, "stage") && !strings.Contains(sectionLower, "ready") {
+				return true
+			}
+		case "blocked":
+			if strings.Contains(sectionLower, "blocked") {
+				return true
+			}
+		default:
+			if strings.Contains(sectionLower, colLower) {
+				return true
+			}
 		}
 	}
 	return false
@@ -1131,49 +1199,113 @@ func isActiveYouTrackStatus(status string) bool {
 
 func filterAsanaTasksByColumns(tasks []AsanaTask, selectedColumns []string) []AsanaTask {
 	if len(selectedColumns) == 0 {
+		fmt.Printf("FILTER DEBUG: No columns specified, returning all %d tasks\n", len(tasks))
 		return tasks
 	}
 
+	fmt.Printf("FILTER DEBUG: Filtering %d tasks by columns: %v\n", len(tasks), selectedColumns)
+
 	filtered := []AsanaTask{}
-	for _, task := range tasks {
+
+	for i, task := range tasks {
 		if len(task.Memberships) > 0 {
-			sectionName := strings.ToLower(task.Memberships[0].Section.Name)
+			sectionName := strings.ToLower(strings.TrimSpace(task.Memberships[0].Section.Name))
+
+			// Debug: Print first few tasks to see what sections we're getting
+			if i < 5 {
+				fmt.Printf("FILTER DEBUG: Task %d '%s' is in section '%s'\n", i, task.Name, sectionName)
+			}
 
 			// Check if task's section matches ANY of the selected columns
+			matchFound := false
 			for _, selectedCol := range selectedColumns {
-				selectedColLower := strings.ToLower(selectedCol)
+				selectedColLower := strings.ToLower(strings.TrimSpace(selectedCol))
 
-				// MORE PRECISE matching - check for exact matches or specific patterns
+				// CRITICAL FIX: More precise matching logic
 				var matches bool
 				switch selectedColLower {
 				case "backlog":
-					matches = strings.Contains(sectionName, "backlog")
+					// Must contain "backlog" and NOT be in other specific sections
+					matches = strings.Contains(sectionName, "backlog") &&
+						!strings.Contains(sectionName, "dev") &&
+						!strings.Contains(sectionName, "stage") &&
+						!strings.Contains(sectionName, "blocked") &&
+						!strings.Contains(sectionName, "progress")
+
 				case "in progress":
-					matches = strings.Contains(sectionName, "in progress") || strings.Contains(sectionName, "progress")
+					// Must contain "progress" or "in progress"
+					matches = strings.Contains(sectionName, "in progress") ||
+						(strings.Contains(sectionName, "progress") && !strings.Contains(sectionName, "backlog"))
+
 				case "dev":
-					matches = strings.Contains(sectionName, "dev") && !strings.Contains(sectionName, "ready")
+					// Must contain "dev" but NOT "ready" (to avoid "ready for dev")
+					matches = strings.Contains(sectionName, "dev") &&
+						!strings.Contains(sectionName, "ready")
+
 				case "stage":
-					matches = strings.Contains(sectionName, "stage") && !strings.Contains(sectionName, "ready")
+					// Must contain "stage" but NOT "ready" (to avoid "ready for stage")
+					matches = strings.Contains(sectionName, "stage") &&
+						!strings.Contains(sectionName, "ready")
+
 				case "blocked":
+					// Must contain "blocked"
 					matches = strings.Contains(sectionName, "blocked")
+
 				case "ready for stage":
-					matches = strings.Contains(sectionName, "ready for stage") || strings.Contains(sectionName, "ready") && strings.Contains(sectionName, "stage")
+					// Must contain both "ready" AND "stage"
+					matches = strings.Contains(sectionName, "ready") && strings.Contains(sectionName, "stage")
+
 				case "findings":
+					// Must contain "findings"
 					matches = strings.Contains(sectionName, "findings")
+
 				default:
-					// Fallback to contains check for any other columns
+					// Fallback: exact contains check
 					matches = strings.Contains(sectionName, selectedColLower)
 				}
 
 				if matches {
-					filtered = append(filtered, task)
-					break // Found a match, no need to check other columns for this task
+					matchFound = true
+					// Debug: Show which tasks match
+					if i < 10 {
+						fmt.Printf("FILTER DEBUG: ✓ Task '%s' (section: '%s') matches column '%s'\n",
+							task.Name, sectionName, selectedColLower)
+					}
+					break
 				}
+			}
+
+			if matchFound {
+				filtered = append(filtered, task)
+			} else {
+				// Debug: Show which tasks are filtered out
+				if i < 10 {
+					fmt.Printf("FILTER DEBUG: ✗ Task '%s' (section: '%s') does NOT match any of %v\n",
+						task.Name, sectionName, selectedColumns)
+				}
+			}
+		} else {
+			// Task has no section membership
+			if i < 5 {
+				fmt.Printf("FILTER DEBUG: Task %d '%s' has no section membership\n", i, task.Name)
 			}
 		}
 	}
 
-	fmt.Printf("Filtered %d tasks from %d total for columns: %v\n", len(filtered), len(tasks), selectedColumns)
+	fmt.Printf("FILTER DEBUG: *** RESULT: Filtered %d tasks from %d total for columns: %v ***\n",
+		len(filtered), len(tasks), selectedColumns)
+
+	// Debug: Show sample of filtered tasks
+	for i, task := range filtered {
+		if i < 3 {
+			sectionName := "No Section"
+			if len(task.Memberships) > 0 {
+				sectionName = task.Memberships[0].Section.Name
+			}
+			fmt.Printf("FILTER DEBUG: Filtered Task %d: '%s' (Section: %s)\n", i+1, task.Name, sectionName)
+		}
+	}
+
 	return filtered
 }
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Dashboard from './components/Dashboard';
 import AnalysisResults from './components/AnalysisResults';
 import NavBar from './components/NavBar';
-import LuxuryBackground from './components/Background'; // Updated import
+import LuxuryBackground from './components/Background';
 import { analyzeTickets, syncSingleTicket, createSingleTicket, createMissingTickets } from './services/api';
 import './styles/glass-theme.css';
 
@@ -18,23 +18,45 @@ function App() {
     setSelectedColumn(column);
   };
 
-const handleAnalyze = async () => {
-  if (!selectedColumn) return;
+  const handleAnalyze = async () => {
+    if (!selectedColumn) return;
 
-  setLoading(true);
-  
-  try {
-    // FIXED: Pass the selectedColumn to the API call
-    const data = await analyzeTickets(selectedColumn);
-    setAnalysisData(data);
-    setCurrentView('results');
-  } catch (error) {
-    console.error('Analysis failed:', error);
-    alert('Analysis failed: ' + error.message);
-  } finally {
-    setLoading(false);
-  }
-};
+    setLoading(true);
+    
+    try {
+      const data = await analyzeTickets(selectedColumn);
+      // IMPORTANT: Store both the analysis data and the column it was analyzed for
+      setAnalysisData({
+        ...data,
+        analyzedColumn: selectedColumn // Store which column was analyzed
+      });
+      setCurrentView('results');
+    } catch (error) {
+      console.error('Analysis failed:', error);
+      alert('Analysis failed: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReAnalyze = async (columnToAnalyze) => {
+    setLoading(true);
+    try {
+      const data = await analyzeTickets(columnToAnalyze);
+      setAnalysisData({
+        ...data,
+        analyzedColumn: columnToAnalyze // Store which column was analyzed
+      });
+      if (columnToAnalyze !== selectedColumn) {
+        setSelectedColumn(columnToAnalyze);
+      }
+    } catch (error) {
+      console.error('Re-analysis failed:', error);
+      alert('Re-analysis failed: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleBackToDashboard = () => {
     setCurrentView('dashboard');
@@ -54,7 +76,6 @@ const handleAnalyze = async () => {
   };
 
   const handleCreateSingle = async (taskId) => {
-    console.log('Creating single ticket for task ID:', taskId);
     setLoading(true);
     try {
       await createSingleTicket(taskId);
@@ -81,8 +102,11 @@ const handleAnalyze = async () => {
 
   const refreshAnalysis = async () => {
     try {
-      const data = await analyzeTickets();
-      setAnalysisData(data);
+      const data = await analyzeTickets(selectedColumn);
+      setAnalysisData({
+        ...data,
+        analyzedColumn: selectedColumn
+      });
     } catch (error) {
       console.error('Failed to refresh analysis:', error);
     }
@@ -95,7 +119,6 @@ const handleAnalyze = async () => {
       display: 'flex',
       flexDirection: 'column'
     }}>
-      {/* Luxury Interactive Background - Updated component */}
       <div className="luxury-background-container">
         <LuxuryBackground 
           currentView={currentView}
@@ -105,10 +128,8 @@ const handleAnalyze = async () => {
         />
       </div>
       
-      {/* Blur Separator Layer - Creates depth separation between background and UI */}
       <div className="luxury-canvas-blur-separator" />
       
-      {/* Main Application Content - Glass themed dashboard with enhanced layering */}
       <div className="luxury-canvas-content-layer" style={{ flex: '1', paddingBottom: '80px' }}>
         <NavBar
           title={currentView === 'dashboard' ? 'Dashboard' : 'Analysis Results'}
@@ -171,6 +192,8 @@ const handleAnalyze = async () => {
               onSync={handleSync}
               onCreateSingle={handleCreateSingle}
               onCreateMissing={handleCreateMissing}
+              onReAnalyze={handleReAnalyze}
+              loading={loading}
               setNavBarSlots={(left, right) => { setNavLeft(left); setNavRight(right); }}
             />
           )}

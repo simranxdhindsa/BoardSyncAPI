@@ -1,18 +1,16 @@
-// Choose API base depending on environment
 const API_BASE =
   process.env.NODE_ENV === 'production'
     ? process.env.REACT_APP_API_URL || 'https://boardsyncapi.onrender.com'
     : 'http://localhost:8080';
 
 export const analyzeTickets = async (columnFilter = '') => {
-  // Build the URL with column parameter if provided
   let url = `${API_BASE}/analyze`;
   if (columnFilter) {
     url += `?column=${encodeURIComponent(columnFilter)}`;
   }
   
-  console.log('Analyzing tickets with column filter:', columnFilter); // DEBUG
-  console.log('API URL:', url); // DEBUG
+  console.log('Analyzing tickets with column filter:', columnFilter);
+  console.log('API URL:', url);
   
   const response = await fetch(url);
   if (!response.ok) {
@@ -20,7 +18,7 @@ export const analyzeTickets = async (columnFilter = '') => {
   }
   const result = await response.json();
   
-  console.log('Analysis result:', result); // DEBUG
+  console.log('Analysis result:', result);
   return result;
 };
 
@@ -36,7 +34,6 @@ export const syncTickets = async (tickets) => {
   return response.json();
 };
 
-// Individual ticket sync
 export const syncSingleTicket = async (ticketId) => {
   return syncTickets([{ ticket_id: ticketId, action: 'sync' }]);
 };
@@ -52,7 +49,6 @@ export const createMissingTickets = async () => {
   return response.json();
 };
 
-// Individual ticket creation
 export const createSingleTicket = async (taskId) => {
   const response = await fetch(`${API_BASE}/create-single`, {
     method: 'POST',
@@ -65,9 +61,7 @@ export const createSingleTicket = async (taskId) => {
   return response.json();
 };
 
-// NEW: Delete tickets functionality
 export const deleteTickets = async (ticketIds, source) => {
-  // Validate parameters
   if (!Array.isArray(ticketIds) || ticketIds.length === 0) {
     throw new Error('ticketIds must be a non-empty array');
   }
@@ -95,7 +89,6 @@ export const deleteTickets = async (ticketIds, source) => {
   return response.json();
 };
 
-// Auto-sync control
 export const getAutoSyncStatus = async () => {
   const response = await fetch(`${API_BASE}/auto-sync`);
   if (!response.ok) {
@@ -128,7 +121,6 @@ export const stopAutoSync = async () => {
   return response.json();
 };
 
-// Auto-create control
 export const getAutoCreateStatus = async () => {
   const response = await fetch(`${API_BASE}/auto-create`);
   if (!response.ok) {
@@ -161,19 +153,25 @@ export const stopAutoCreate = async () => {
   return response.json();
 };
 
-// Get tickets by type (for detailed views)
+// FIXED: Get tickets by type with proper column parameter passing
 export const getTicketsByType = async (type, column = '') => {
   const params = new URLSearchParams({ type });
-  if (column) params.append('column', column);
+  if (column) {
+    params.append('column', column);
+  }
+  
+  console.log('Getting tickets by type:', type, 'for column:', column); // DEBUG
   
   const response = await fetch(`${API_BASE}/tickets?${params}`);
   if (!response.ok) {
     throw new Error(`Get tickets failed: ${response.status}`);
   }
-  return response.json();
+  const result = await response.json();
+  
+  console.log('Get tickets result:', result); // DEBUG
+  return result;
 };
 
-// Ignore ticket management
 export const ignoreTicket = async (ticketId, type = 'forever') => {
   const response = await fetch(`${API_BASE}/ignore`, {
     method: 'POST',
