@@ -1,246 +1,247 @@
-package config
+package auth
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
+	"errors"
 	"time"
 
 	"asana-youtrack-sync/database"
+	"crypto/rand"
+	"encoding/base64"
+
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/argon2"
 )
 
-// UserSettings represents user configuration
-type UserSettings struct {
-	ID                  int                 `json:"id"`
-	UserID              int                 `json:"user_id"`
-	AsanaPAT            string              `json:"asana_pat"`
-	YouTrackBaseURL     string              `json:"youtrack_base_url"`
-	YouTrackToken       string              `json:"youtrack_token"`
-	AsanaProjectID      string              `json:"asana_project_id"`
-	YouTrackProjectID   string              `json:"youtrack_project_id"`
-	CustomFieldMappings CustomFieldMappings `json:"custom_field_mappings"`
-	CreatedAt           time.Time           `json:"created_at"`
-	UpdatedAt           time.Time           `json:"updated_at"`
-}
+var (
+	ErrUserExists         = errors.New("user already exists")
+	ErrUserNotFound       = errors.New("user not found")
+	ErrInvalidCredentials = errors.New("invalid credentials")
+)
 
-// CustomFieldMappings represents custom field mapping configuration
-type CustomFieldMappings struct {
-	TagMapping      map[string]string `json:"tag_mapping"`
-	PriorityMapping map[string]string `json:"priority_mapping"`
-	StatusMapping   map[string]string `json:"status_mapping"`
-	CustomFields    map[string]string `json:"custom_fields"`
-}
-
-// UpdateSettingsRequest represents a settings update request
-type UpdateSettingsRequest struct {
-	AsanaPAT            string              `json:"asana_pat"`
-	YouTrackBaseURL     string              `json:"youtrack_base_url"`
-	YouTrackToken       string              `json:"youtrack_token"`
-	AsanaProjectID      string              `json:"asana_project_id"`
-	YouTrackProjectID   string              `json:"youtrack_project_id"`
-	CustomFieldMappings CustomFieldMappings `json:"custom_field_mappings"`
-}
-
-// Project represents project information for dropdowns
-type Project struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-// AsanaProject represents an Asana project
-type AsanaProject struct {
-	GID  string `json:"gid"`
-	Name string `json:"name"`
-}
-
-// YouTrackProject represents a YouTrack project
-type YouTrackProject struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	ShortName string `json:"shortName"`
-}
-
+// Service handles authentication operations
 type Service struct {
-	db *database.DB
+	db        *database.DB
+	jwtSecret []byte
 }
 
-// NewService creates a new settings service
-func NewService(db *database.DB) *Service {
-	return &Service{db: db}
+// NewService creates a new authentication service
+func NewService(db *database.DB, jwtSecret string) *Service {
+	return &Service{
+		db:        db,
+		jwtSecret: []byte(jwtSecret),
+	}
 }
 
-// GetSettings retrieves user settings
-func (s *Service) GetSettings(userID int) (*UserSettings, error) {
-	settings, err := s.db.GetUserSettings(userID)
-	if err != nil {
-		return nil, fmt.Errorf("database error: %w", err)
+// Register creates a new user account
+func (s *Service) Register(req RegisterRequest) (*UserInfo, error) {
+	// Check if user already exists
+	if _, err := s.db.GetUserByUsername(req.Username); err == nil {
+		return nil, ErrUserExists
+	}
+	if _, err := s.db.GetUserByEmail(req.Email); err == nil {
+		return nil, ErrUserExists
 	}
 
-	return &UserSettings{
-		ID:                  settings.ID,
-		UserID:              settings.UserID,
-		AsanaPAT:            settings.AsanaPAT,
-		YouTrackBaseURL:     settings.YouTrackBaseURL,
-		YouTrackToken:       settings.YouTrackToken,
-		AsanaProjectID:      settings.AsanaProjectID,
-		YouTrackProjectID:   settings.YouTrackProjectID,
-		CustomFieldMappings: settings.CustomFieldMappings,
-		CreatedAt:           settings.CreatedAt,
-		UpdatedAt:           settings.UpdatedAt,
-	}, nil
-}
+	// Hash password
+	passwordHash := s.hashPassword(req.Password)
 
-// UpdateSettings updates user settings
-func (s *Service) UpdateSettings(userID int, req UpdateSettingsRequest) (*UserSettings, error) {
-	updatedSettings, err := s.db.UpdateUserSettings(
-		userID,
-		req.AsanaPAT,
-		req.YouTrackBaseURL,
-		req.YouTrackToken,
-		req.AsanaProjectID,
-		req.YouTrackProjectID,
-		req.CustomFieldMappings,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("database error: %w", err)
-	}
-
-	return &UserSettings{
-		ID:                  updatedSettings.ID,
-		UserID:              updatedSettings.UserID,
-		AsanaPAT:            updatedSettings.AsanaPAT,
-		YouTrackBaseURL:     updatedSettings.YouTrackBaseURL,
-		YouTrackToken:       updatedSettings.YouTrackToken,
-		AsanaProjectID:      updatedSettings.AsanaProjectID,
-		YouTrackProjectID:   updatedSettings.YouTrackProjectID,
-		CustomFieldMappings: updatedSettings.CustomFieldMappings,
-		CreatedAt:           updatedSettings.CreatedAt,
-		UpdatedAt:           updatedSettings.UpdatedAt,
-	}, nil
-}
-
-// GetAsanaProjects fetches Asana projects using user's PAT
-func (s *Service) GetAsanaProjects(userID int) ([]Project, error) {
-	settings, err := s.GetSettings(userID)
+	// Create user
+	user, err := s.db.CreateUser(req.Username, req.Email, passwordHash)
 	if err != nil {
 		return nil, err
 	}
 
-	if settings.AsanaPAT == "" {
-		return nil, fmt.Errorf("Asana PAT not configured")
-	}
-
-	// Create HTTP request to Asana API
-	req, err := http.NewRequest("GET", "https://app.asana.com/api/1.0/projects", nil)
-	if err != nil {
-		return nil, fmt.Errorf("request creation error: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+settings.AsanaPAT)
-	req.Header.Set("Accept", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("API request error: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Asana API error: status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("response read error: %w", err)
-	}
-
-	var response struct {
-		Data []AsanaProject `json:"data"`
-	}
-
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("JSON unmarshal error: %w", err)
-	}
-
-	// Convert to common Project format
-	projects := make([]Project, len(response.Data))
-	for i, project := range response.Data {
-		projects[i] = Project{
-			ID:   project.GID,
-			Name: project.Name,
-		}
-	}
-
-	return projects, nil
+	return &UserInfo{
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+	}, nil
 }
 
-// GetYouTrackProjects fetches YouTrack projects using user's token
-func (s *Service) GetYouTrackProjects(userID int) ([]Project, error) {
-	settings, err := s.GetSettings(userID)
+// Login authenticates a user and returns a JWT token
+func (s *Service) Login(req LoginRequest) (*LoginResponse, error) {
+	// Get user by username
+	user, err := s.db.GetUserByUsername(req.Username)
+	if err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	// Verify password
+	if !s.verifyPassword(req.Password, user.PasswordHash) {
+		return nil, ErrInvalidCredentials
+	}
+
+	// Generate JWT token
+	token, expiresAt, err := s.generateToken(user)
 	if err != nil {
 		return nil, err
 	}
 
-	if settings.YouTrackBaseURL == "" || settings.YouTrackToken == "" {
-		return nil, fmt.Errorf("YouTrack credentials not configured")
-	}
-
-	// Create HTTP request to YouTrack API
-	url := fmt.Sprintf("%s/api/admin/projects", settings.YouTrackBaseURL)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("request creation error: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+settings.YouTrackToken)
-	req.Header.Set("Accept", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("API request error: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("YouTrack API error: status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("response read error: %w", err)
-	}
-
-	var projects []YouTrackProject
-	if err := json.Unmarshal(body, &projects); err != nil {
-		return nil, fmt.Errorf("JSON unmarshal error: %w", err)
-	}
-
-	// Convert to common Project format
-	result := make([]Project, len(projects))
-	for i, project := range projects {
-		result[i] = Project{
-			ID:   project.ID,
-			Name: fmt.Sprintf("%s (%s)", project.Name, project.ShortName),
-		}
-	}
-
-	return result, nil
+	return &LoginResponse{
+		Token: token,
+		User: UserInfo{
+			ID:       user.ID,
+			Username: user.Username,
+			Email:    user.Email,
+		},
+		ExpiresAt: expiresAt,
+	}, nil
 }
 
-// TestConnections tests API connections with current settings
-func (s *Service) TestConnections(userID int) (map[string]bool, error) {
-	results := make(map[string]bool)
+// RefreshToken generates a new JWT token for an existing user
+func (s *Service) RefreshToken(userID int) (*TokenResponse, error) {
+	user, err := s.db.GetUserByID(userID)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
 
-	// Test Asana connection
-	_, err := s.GetAsanaProjects(userID)
-	results["asana"] = err == nil
+	token, expiresAt, err := s.generateToken(user)
+	if err != nil {
+		return nil, err
+	}
 
-	// Test YouTrack connection
-	_, err = s.GetYouTrackProjects(userID)
-	results["youtrack"] = err == nil
+	return &TokenResponse{
+		Token:     token,
+		ExpiresAt: expiresAt,
+	}, nil
+}
 
-	return results, nil
+// GetUser retrieves user information by ID
+func (s *Service) GetUser(userID int) (*UserInfo, error) {
+	user, err := s.db.GetUserByID(userID)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+
+	return &UserInfo{
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+	}, nil
+}
+
+// ChangePassword changes a user's password
+func (s *Service) ChangePassword(userID int, req ChangePasswordRequest) error {
+	user, err := s.db.GetUserByID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	// Verify current password
+	if !s.verifyPassword(req.CurrentPassword, user.PasswordHash) {
+		return ErrInvalidCredentials
+	}
+
+	// Hash new password
+	newPasswordHash := s.hashPassword(req.NewPassword)
+
+	// Update password in database
+	return s.db.UpdateUserPassword(userID, newPasswordHash)
+}
+
+// ValidateToken validates a JWT token and returns claims
+func (s *Service) ValidateToken(tokenString string) (*Claims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return s.jwtSecret, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		return claims, nil
+	}
+
+	return nil, errors.New("invalid token")
+}
+
+// generateToken creates a new JWT token for a user
+func (s *Service) generateToken(user *database.User) (string, time.Time, error) {
+	expiresAt := time.Now().Add(24 * time.Hour) // Token valid for 24 hours
+
+	claims := &Claims{
+		UserID:   user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Subject:   user.Username,
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(s.jwtSecret)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return tokenString, expiresAt, nil
+}
+
+// hashPassword hashes a password using Argon2
+func (s *Service) hashPassword(password string) string {
+	salt := make([]byte, 16)
+	rand.Read(salt)
+
+	hash := argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
+
+	// Encode salt and hash to base64
+	saltEncoded := base64.StdEncoding.EncodeToString(salt)
+	hashEncoded := base64.StdEncoding.EncodeToString(hash)
+
+	return saltEncoded + "$" + hashEncoded
+}
+
+// verifyPassword verifies a password against its hash
+func (s *Service) verifyPassword(password, hashedPassword string) bool {
+	parts := splitString(hashedPassword, "$")
+	if len(parts) != 2 {
+		return false
+	}
+
+	salt, err := base64.StdEncoding.DecodeString(parts[0])
+	if err != nil {
+		return false
+	}
+
+	expectedHash, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
+
+	hash := argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
+
+	return compareSlices(hash, expectedHash)
+}
+
+// Helper functions
+func splitString(s, sep string) []string {
+	var parts []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if i+len(sep) <= len(s) && s[i:i+len(sep)] == sep {
+			parts = append(parts, s[start:i])
+			start = i + len(sep)
+			i += len(sep) - 1
+		}
+	}
+	parts = append(parts, s[start:])
+	return parts
+}
+
+func compareSlices(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

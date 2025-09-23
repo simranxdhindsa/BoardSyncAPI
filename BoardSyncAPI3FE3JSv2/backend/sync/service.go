@@ -1,18 +1,17 @@
 package sync
 
 import (
-	"database/sql"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"asana-youtrack-sync/cache"
 	configpkg "asana-youtrack-sync/config"
+	"asana-youtrack-sync/database"
 )
 
 // Service handles sync operations with user authentication
 type Service struct {
-	db              *sql.DB
+	db              *database.DB
 	configService   *configpkg.Service
 	rollbackService *RollbackService
 	wsManager       *WebSocketManager
@@ -20,13 +19,13 @@ type Service struct {
 }
 
 // NewService creates a new sync service
-func NewService(db *sql.DB, configService *configpkg.Service, rollbackService *RollbackService, wsManager *WebSocketManager, cache cache.Cache) *Service {
+func NewService(db *database.DB, configService *configpkg.Service, rollbackService *RollbackService, wsManager *WebSocketManager, cacheInstance cache.Cache) *Service {
 	return &Service{
 		db:              db,
 		configService:   configService,
 		rollbackService: rollbackService,
 		wsManager:       wsManager,
-		cache:           cache,
+		cache:           cacheInstance,
 	}
 }
 
@@ -105,19 +104,6 @@ func (s *Service) performSync(userID int, operation *SyncOperation, settings *co
 		s.rollbackService.UpdateOperationStatus(operation.ID, StatusFailed, &errMsg)
 		s.wsManager.NotifyError(userID, operation.ID, errMsg)
 		return
-	}
-
-	// Save rollback data in operation
-	if len(rollbackData.CreatedItems) > 0 || len(rollbackData.ModifiedItems) > 0 {
-		operationData := operation.OperationData
-		if operationData == nil {
-			operationData = make(map[string]interface{})
-		}
-		operationData["rollback_data"] = rollbackData
-
-		// Update operation with rollback data
-		rollbackDataJSON, _ := json.Marshal(operationData)
-		s.db.Exec("UPDATE sync_operations SET operation_data = ? WHERE id = ?", string(rollbackDataJSON), operation.ID)
 	}
 
 	// Update final status

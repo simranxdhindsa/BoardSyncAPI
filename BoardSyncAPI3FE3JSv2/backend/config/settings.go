@@ -79,21 +79,40 @@ func (s *Service) GetSettings(userID int) (*UserSettings, error) {
 	}
 
 	return &UserSettings{
-		ID:                  settings.ID,
-		UserID:              settings.UserID,
-		AsanaPAT:            settings.AsanaPAT,
-		YouTrackBaseURL:     settings.YouTrackBaseURL,
-		YouTrackToken:       settings.YouTrackToken,
-		AsanaProjectID:      settings.AsanaProjectID,
-		YouTrackProjectID:   settings.YouTrackProjectID,
-		CustomFieldMappings: settings.CustomFieldMappings,
-		CreatedAt:           settings.CreatedAt,
-		UpdatedAt:           settings.UpdatedAt,
+		ID:                settings.ID,
+		UserID:            settings.UserID,
+		AsanaPAT:          settings.AsanaPAT,
+		YouTrackBaseURL:   settings.YouTrackBaseURL,
+		YouTrackToken:     settings.YouTrackToken,
+		AsanaProjectID:    settings.AsanaProjectID,
+		YouTrackProjectID: settings.YouTrackProjectID,
+		CustomFieldMappings: CustomFieldMappings{
+			TagMapping:      settings.CustomFieldMappings.TagMapping,
+			PriorityMapping: settings.CustomFieldMappings.PriorityMapping,
+			StatusMapping:   settings.CustomFieldMappings.StatusMapping,
+			CustomFields:    settings.CustomFieldMappings.CustomFields,
+		},
+		CreatedAt: settings.CreatedAt,
+		UpdatedAt: settings.UpdatedAt,
 	}, nil
 }
 
 // UpdateSettings updates user settings
 func (s *Service) UpdateSettings(userID int, req UpdateSettingsRequest) (*UserSettings, error) {
+	// Initialize mappings if nil
+	if req.CustomFieldMappings.TagMapping == nil {
+		req.CustomFieldMappings.TagMapping = make(map[string]string)
+	}
+	if req.CustomFieldMappings.PriorityMapping == nil {
+		req.CustomFieldMappings.PriorityMapping = make(map[string]string)
+	}
+	if req.CustomFieldMappings.StatusMapping == nil {
+		req.CustomFieldMappings.StatusMapping = make(map[string]string)
+	}
+	if req.CustomFieldMappings.CustomFields == nil {
+		req.CustomFieldMappings.CustomFields = make(map[string]string)
+	}
+
 	updatedSettings, err := s.db.UpdateUserSettings(
 		userID,
 		req.AsanaPAT,
@@ -101,23 +120,33 @@ func (s *Service) UpdateSettings(userID int, req UpdateSettingsRequest) (*UserSe
 		req.YouTrackToken,
 		req.AsanaProjectID,
 		req.YouTrackProjectID,
-		req.CustomFieldMappings,
+		database.CustomFieldMappings{
+			TagMapping:      req.CustomFieldMappings.TagMapping,
+			PriorityMapping: req.CustomFieldMappings.PriorityMapping,
+			StatusMapping:   req.CustomFieldMappings.StatusMapping,
+			CustomFields:    req.CustomFieldMappings.CustomFields,
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
 	return &UserSettings{
-		ID:                  updatedSettings.ID,
-		UserID:              updatedSettings.UserID,
-		AsanaPAT:            updatedSettings.AsanaPAT,
-		YouTrackBaseURL:     updatedSettings.YouTrackBaseURL,
-		YouTrackToken:       updatedSettings.YouTrackToken,
-		AsanaProjectID:      updatedSettings.AsanaProjectID,
-		YouTrackProjectID:   updatedSettings.YouTrackProjectID,
-		CustomFieldMappings: updatedSettings.CustomFieldMappings,
-		CreatedAt:           updatedSettings.CreatedAt,
-		UpdatedAt:           updatedSettings.UpdatedAt,
+		ID:                updatedSettings.ID,
+		UserID:            updatedSettings.UserID,
+		AsanaPAT:          updatedSettings.AsanaPAT,
+		YouTrackBaseURL:   updatedSettings.YouTrackBaseURL,
+		YouTrackToken:     updatedSettings.YouTrackToken,
+		AsanaProjectID:    updatedSettings.AsanaProjectID,
+		YouTrackProjectID: updatedSettings.YouTrackProjectID,
+		CustomFieldMappings: CustomFieldMappings{
+			TagMapping:      updatedSettings.CustomFieldMappings.TagMapping,
+			PriorityMapping: updatedSettings.CustomFieldMappings.PriorityMapping,
+			StatusMapping:   updatedSettings.CustomFieldMappings.StatusMapping,
+			CustomFields:    updatedSettings.CustomFieldMappings.CustomFields,
+		},
+		CreatedAt: updatedSettings.CreatedAt,
+		UpdatedAt: updatedSettings.UpdatedAt,
 	}, nil
 }
 
@@ -132,6 +161,7 @@ func (s *Service) GetAsanaProjects(userID int) ([]Project, error) {
 		return nil, fmt.Errorf("Asana PAT not configured")
 	}
 
+	// Create HTTP request to Asana API
 	req, err := http.NewRequest("GET", "https://app.asana.com/api/1.0/projects", nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation error: %w", err)
@@ -164,6 +194,7 @@ func (s *Service) GetAsanaProjects(userID int) ([]Project, error) {
 		return nil, fmt.Errorf("JSON unmarshal error: %w", err)
 	}
 
+	// Convert to common Project format
 	projects := make([]Project, len(response.Data))
 	for i, project := range response.Data {
 		projects[i] = Project{
@@ -186,6 +217,7 @@ func (s *Service) GetYouTrackProjects(userID int) ([]Project, error) {
 		return nil, fmt.Errorf("YouTrack credentials not configured")
 	}
 
+	// Create HTTP request to YouTrack API
 	url := fmt.Sprintf("%s/api/admin/projects", settings.YouTrackBaseURL)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -216,6 +248,7 @@ func (s *Service) GetYouTrackProjects(userID int) ([]Project, error) {
 		return nil, fmt.Errorf("JSON unmarshal error: %w", err)
 	}
 
+	// Convert to common Project format
 	result := make([]Project, len(projects))
 	for i, project := range projects {
 		result[i] = Project{
